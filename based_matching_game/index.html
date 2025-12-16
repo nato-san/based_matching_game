@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Based Matching Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a1022; /* unified blue background */
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          "ヒラギノ角ゴ ProN",
+          "Noto Sans JP",
+          sans-serif;
+      }
+      .game-root {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+      }
+      /* Mobile-first portrait board container (2:3 aspect via inner grid) */
+      .board-wrap {
+        width: min(100vw, 420px);
+        height: min(100vh, 720px);
+        aspect-ratio: 2 / 3;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        box-sizing: border-box;
+        background: #0a1022; /* blue */
+      }
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #fff;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #173257, #12264a);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+      }
+      .top-left {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        font-weight: 600;
+      }
+      .score,
+      .timer,
+      .moves {
+        font-size: 14px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+      button.ui {
+        appearance: none;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 14px;
+        font-weight: 700;
+        color: #071021;
+        background: var(--accent, #4da3ff);
+        box-shadow: 0 4px 0 #2b6fb8;
+        cursor: pointer;
+        transition: transform 0.05s ease;
+      }
+      button.ui:active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #2b6fb8;
+      }
+      button.secondary {
+        background: #77c2ff;
+        box-shadow: 0 4px 0 #4c97d6;
+      }
+      button.ghost {
+        background: #173257;
+        color: #dbe6ff;
+        box-shadow: none;
+      }
+
+      .grid {
+        flex: 1 1 auto;
+        display: grid;
+        gap: 10px;
+        /* Default 4x4 on phones; can grow by config */
+        grid-template-columns: repeat(4, 1fr);
+        grid-auto-rows: 1fr;
+      }
+
+      .card {
+        position: relative;
+        width: 100%;
+        background: transparent;
+        perspective: 800px;
+        user-select: none;
+      }
+      .card-inner {
+        position: relative;
+        width: 100%;
+        padding-top: 140%; /* portrait-friendly ratio */
+        transform-style: preserve-3d;
+        transition: transform 300ms ease;
+      }
+      .card.flipped .card-inner {
+        transform: rotateY(180deg);
+      }
+      .card-face {
+        position: absolute;
+        inset: 0;
+        border-radius: 12px;
+        backface-visibility: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        border: none !important;
+        outline: none !important;
+        background-color: transparent;
+      }
+      .card-front {
+        /* Use custom card back design image instead of '?' */
+        border: none !important;
+        outline: none !important;
+        overflow: hidden;
+        background-image: url("images/base_00.jpg");
+        background-size: 100% 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: transparent;
+      }
+      .card-back {
+        transform: rotateY(180deg);
+        background: #0c1830;
+        border: none !important;
+        outline: none !important;
+        overflow: hidden;
+        background-color: #0c1830;
+      }
+      .card {
+        border: none !important;
+        outline: none !important;
+      }
+      .card-back img {
+        border: none !important;
+        outline: none !important;
+      }
+      .symbol {
+        width: 78%;
+        height: 78%;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: #0f2747;
+        color: #fff;
+        font-weight: 900;
+        font-size: clamp(16px, 6vw, 24px);
+        text-align: center;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      .matched .card-front {
+        filter: saturate(0.2) brightness(0.7);
+      }
+      .matched .card-back {
+        filter: saturate(0.2) brightness(0.7);
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 10;
+      }
+      .overlay.game-over {
+        grid-template-rows: auto auto auto;
+        align-items: center;
+        justify-items: center;
+        gap: 15px;
+      }
+      .overlay.game-over #game-over-message {
+        grid-row: 1;
+        align-self: center;
+      }
+      .overlay.game-over #btn-start {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .overlay.game-over #btn-play-again {
+        grid-row: 2;
+        align-self: center;
+      }
+      .overlay.game-over #btn-share-farcaster {
+        grid-row: 3;
+        align-self: center;
+      }
+      .panel {
+        width: min(88vw, 360px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 18px;
+        text-align: center;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      }
+      .panel h1 {
+        margin: 6px 0 12px;
+        font-size: 22px;
+      }
+      .panel p {
+        margin: 6px 0;
+        opacity: 0.9;
+      }
+      .panel .row {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 14px;
+        flex-wrap: wrap;
+      }
+
+      /* Responsive columns by config later; safe defaults */
+      @media (min-width: 480px) {
+        .board-wrap {
+          width: 420px;
+          height: 630px;
+        }
+      }
+
+      /* Gallery related styles */
+      .gallery-button {
+        margin-left: 8px;
+      }
+      .gallery-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 20;
+      }
+      .gallery-overlay.active {
+        display: grid;
+      }
+      .gallery-panel {
+        width: min(90vw, 500px);
+        max-height: 80vh;
+        overflow-y: auto;
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      }
+      .gallery-panel h2 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        text-align: center;
+      }
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .gallery-item {
+        aspect-ratio: 1;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #0c1830;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+      }
+      .gallery-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .gallery-item.locked {
+        filter: grayscale(100%) brightness(0.3);
+      }
+      .gallery-item.locked::after {
+        content: "🔒";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 32px;
+      }
+      .gallery-item.minted::after {
+        content: "✓ Minted";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 255, 0, 0.8);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px;
+        text-align: center;
+      }
+      .mint-button {
+        margin-top: 10px;
+        width: 100%;
+      }
+      .mint-notification {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        z-index: 30;
+        display: none;
+        align-items: center;
+        gap: 12px;
+      }
+      .mint-notification.active {
+        display: flex;
+      }
+      .mint-notification img {
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+    </style>
+
+      <style id="assistant-card-size-fit">
+      /* Ensure cards scale to fit the grid rows on higher levels */
+      .grid { grid-auto-rows: unset !important; }
+      .card { height: 100% !important; }
+      .card-inner {
+        padding-top: 0 !important; /* disable aspect via padding */
+        height: 100% !important;   /* fill the grid cell */
+      }
+      .card-face { height: 100% !important; }
+    </style>
+    <style id="theme-override">
+      /* Blue theme override (#0000ff) */
+      html,
+      body {
+        background: #0000ff !important;
+      }
+      .board-wrap {
+        background: #0000ff !important;
+      }
+      .top-bar {
+        background: #0000ff !important;
+        color: #ffffff !important;
+      }
+      .top-bar * {
+        color: #ffffff !important;
+      }
+      button,
+      .btn,
+      .ui-button {
+        background: #0000ff !important;
+        color: #ffffff !important;
+        border-color: rgba(255, 255, 255, 0.35) !important;
+      }
+      .card-back {
+        background: #0000ff !important;
+      }
+    </style>
+    <style id="assistant-start-button-styles">
+      #btn-start {
+        width: auto !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        min-height: 40px !important;
+        padding: 8px 16px !important;
+        display: inline-block !important;
+        align-self: center !important;
+        flex: 0 0 auto !important;
+        text-transform: uppercase !important;
+        font-size: 16px !important;
+        line-height: 1.2 !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.5px;
+        position: static !important;
+        top: 0 !important;
+        margin-top: 80px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+    </style>
+    <script>
+      // Ensure the Start button width matches its text at runtime
+      (function applyStartBtnStyles() {
+        const apply = () => {
+          const btn = document.getElementById("btn-start");
+          if (btn) {
+            btn.style.width = "auto";
+            btn.style.maxWidth = "none";
+            btn.style.minWidth = "0";
+            btn.style.padding = "8px 16px";
+            btn.style.display = "inline-block";
+            btn.style.alignSelf = "center";
+            btn.style.flex = "0 0 auto";
+            btn.style.position = "static";
+            btn.style.top = "0";
+            btn.style.marginTop = "80px";
+          }
+        };
+        window.addEventListener("load", apply);
+        setTimeout(apply, 200);
+        document.addEventListener("DOMContentLoaded", apply);
+      })();
+    </script>
+</head>
+  <body>
+    <div class="game-root">
+      <div class="board-wrap">
+        <div class="top-bar">
+          <div class="top-left">
+            <div class="timer">Time: <span id="time">0.0</span>s</div>
+          </div>
+          <div class="controls">
+            <button type="button" id="btn-gallery" class="ui ghost gallery-button" aria-label="Gallery">Gallery</button>
+            <button type="button" id="btn-restart" class="ui secondary" aria-label="Restart">Reset</button>
+            <button type="button" id="btn-top" class="ui secondary" aria-label="Back to TOP">TOP</button>
+          </div>
+        </div>
+        <div id="grid" class="grid" role="grid" aria-label="Memory card grid"></div>
+      </div>
+
+      <div id="overlay" class="overlay" hidden>
+        <div id="game-over-message" style="display: none; color: #fff; font-size: 36px; font-weight: 700; text-align: center; width: 100%; grid-row: 1; align-self: center;"></div>
+        <button type="button" id="btn-start" class="ui" aria-label="START">
+          START
+        </button>
+        <button
+          type="button"
+          id="btn-play-again"
+          class="ui secondary"
+          aria-label="Play Again"
+          hidden
+          style="min-width: 180px; min-height: 48px"
+        >
+          Play Again
+        </button>
+        <button
+          type="button"
+          id="btn-share-farcaster"
+          class="ui secondary"
+          aria-label="Share on Farcaster"
+          hidden
+          style="min-width: 180px; min-height: 48px; margin-top: 10px;"
+        >
+          Share on Farcaster
+        </button>
+      </div>
+
+      <!-- Gallery overlay -->
+      <div id="gallery-overlay" class="gallery-overlay">
+        <div class="gallery-panel">
+          <h2>Collection</h2>
+          <div id="gallery-grid" class="gallery-grid">
+            <!-- Gallery items will be displayed here -->
+          </div>
+          <div class="row" style="margin-top: 20px;">
+            <button type="button" id="btn-close-gallery" class="ui">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ミント通知 -->
+      <div id="mint-notification" class="mint-notification">
+        <img id="mint-notification-img" src="" alt="Acquired image">
+        <div>
+          <div style="font-weight: 700; font-size: 16px;">New image acquired!</div>
+          <div id="mint-notification-name" style="font-size: 14px; opacity: 0.9;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config (editable) -->
+    <script id="game-config" type="application/json">
+      {
+        "colors": {
+          "background": "#0a1022",
+          "cardFront": "#143a66",
+          "cardBack": "#0c1830",
+          "accent": "#4da3ff"
+        },
+        "gameplay": {
+          "cols": 4,
+          "rows": 6,
+          "flipDelayMs": 700,
+          "timeLimitSec": 100
+        },
+        "ui": {
+          "showTimer": true
+        },
+        "_meta": {
+          "colors.background": { "type": "color", "label": "Background Color" },
+          "colors.cardFront": { "type": "color", "label": "Card Front" },
+          "colors.cardBack": { "type": "color", "label": "Card Back" },
+          "colors.accent": { "type": "color", "label": "Accent" },
+
+          "gameplay.cols": { "type": "number", "label": "Columns", "min": 2, "max": 6, "step": 1 },
+          "gameplay.rows": { "type": "number", "label": "Rows", "min": 2, "max": 8, "step": 1 },
+          "gameplay.flipDelayMs": {
+            "type": "number",
+            "label": "Mismatch Flip Delay (ms)",
+            "min": 200,
+            "max": 2000,
+            "step": 50
+          },
+
+          "gameplay.timeLimitSec": { "type": "number", "label": "Time Limit (seconds)", "min": 10, "max": 600, "step": 5 },
+
+          "ui.showTimer": { "type": "boolean", "label": "Show Timer" }
+        }
+      }
+    </script>
+
+    <!-- Assets: 15 labeled symbols Base_1..Base_15 (text by default, can be swapped to images) -->
+    <script id="game-assets" type="application/json">
+      {
+        "symbols": {
+          "Base_1": {
+            "label": "Base_1",
+            "image": "images/base01.JPG"
+          },
+          "Base_2": {
+            "label": "Base_2",
+            "image": "images/base02.jpg"
+          },
+          "Base_3": {
+            "label": "Base_3",
+            "image": "images/base03.jpg"
+          },
+          "Base_4": {
+            "label": "Base_4",
+            "image": "images/base04.jpg"
+          },
+          "Base_5": {
+            "label": "Base_5",
+            "image": "images/base05.jpg"
+          },
+          "Base_6": {
+            "label": "Base_6",
+            "image": "images/base06.jpg"
+          },
+          "Base_7": {
+            "label": "Base_7",
+            "image": "images/base07.jpg"
+          },
+          "Base_8": {
+            "label": "Base_8",
+            "image": "images/base08.jpg"
+          },
+          "Base_9": {
+            "label": "Base_9",
+            "image": "images/base09.JPG"
+          },
+          "Base_10": {
+            "label": "Base_10",
+            "image": "images/base10.jpg"
+          },
+          "Base_11": {
+            "label": "Base_11",
+            "image": "images/base11.jpg"
+          },
+          "Base_12": {
+            "label": "Base_12",
+            "image": "images/base12.jpg"
+          },
+          "Base_13": {
+            "label": "Base_13",
+            "image": "images/base13.jpg"
+          },
+          "Base_14": {
+            "label": "Base_14",
+            "image": "images/base14.jpg"
+          },
+          "Base_15": {
+            "label": "Base_15",
+            "image": "images/base15.jpg"
+          }
+        },
+        "sounds": {
+          "match": "images/match.mp3",
+          "flip": "images/flip.mp3",
+          "fail": ""
+        },
+        "_meta": {
+          "symbols.Base_1.image": { "label": "Base_1 画像", "category": "画像" },
+          "symbols.Base_2.image": { "label": "Base_2 画像", "category": "画像" },
+          "symbols.Base_3.image": { "label": "Base_3 画像", "category": "画像" },
+          "symbols.Base_4.image": { "label": "Base_4 画像", "category": "画像" },
+          "symbols.Base_5.image": { "label": "Base_5 画像", "category": "画像" },
+          "symbols.Base_6.image": { "label": "Base_6 画像", "category": "画像" },
+          "symbols.Base_7.image": { "label": "Base_7 画像", "category": "画像" },
+          "symbols.Base_8.image": { "label": "Base_8 画像", "category": "画像" },
+          "symbols.Base_9.image": { "label": "Base_9 画像", "category": "画像" },
+          "symbols.Base_10.image": { "label": "Base_10 画像", "category": "画像" },
+          "symbols.Base_11.image": { "label": "Base_11 画像", "category": "画像" },
+          "symbols.Base_12.image": { "label": "Base_12 画像", "category": "画像" },
+          "symbols.Base_13.image": { "label": "Base_13 画像", "category": "画像" },
+          "symbols.Base_14.image": { "label": "Base_14 画像", "category": "画像" },
+          "symbols.Base_15.image": { "label": "Base_15 画像", "category": "画像" },
+
+          "sounds.match": { "label": "一致サウンド", "category": "効果音" },
+          "sounds.flip": { "label": "反転サウンド", "category": "効果音" },
+          "sounds.fail": { "label": "失敗サウンド", "category": "効果音" }
+        }
+      }
+    </script>
+
+    <script>
+      // Game globals
+      let isMuted = false;
+      let gameStarted = false;
+
+      // Config & Assets
+      let CONFIG = {};
+      let ASSETS = {};
+      const loadedSounds = {};
+
+      // Collection management (saved to localStorage)
+      const COLLECTION_KEY = "based_matching_collection";
+      const MINTED_KEY = "based_matching_minted";
+      
+      // Base chain configuration
+      const BASE_CHAIN_ID = 8453; // Base mainnet
+      const BASE_RPC_URL = "https://mainnet.base.org";
+      // NFT Contract address - UPDATE THIS with your deployed contract address
+      const NFT_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: Replace with your contract address
+      
+      // ERC-721 ABI (minimal for minting)
+      const NFT_ABI = [
+        "function mint(address to, string memory tokenURI) public returns (uint256)",
+        "function tokenURI(uint256 tokenId) public view returns (string memory)"
+      ];
+      
+      function getCollection() {
+        try {
+          const stored = localStorage.getItem(COLLECTION_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function saveCollection(collection) {
+        try {
+          localStorage.setItem(COLLECTION_KEY, JSON.stringify(collection));
+        } catch (e) {
+          console.warn("Failed to save collection:", e);
+        }
+      }
+
+      function addToCollection(imageKey) {
+        const collection = getCollection();
+        if (!collection.includes(imageKey)) {
+          collection.push(imageKey);
+          saveCollection(collection);
+          return true; // New addition
+        }
+        return false; // Already owned
+      }
+
+      function getMintedImages() {
+        try {
+          const stored = localStorage.getItem(MINTED_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function saveMintedImage(imageKey) {
+        try {
+          const minted = getMintedImages();
+          if (!minted.includes(imageKey)) {
+            minted.push(imageKey);
+            localStorage.setItem(MINTED_KEY, JSON.stringify(minted));
+          }
+        } catch (e) {
+          console.warn("Failed to save minted image:", e);
+        }
+      }
+
+      function initConfig() {
+        CONFIG = JSON.parse(document.getElementById("game-config").textContent);
+        // reactive style
+        document.body.style.background = CONFIG.colors.background;
+        document.documentElement.style.setProperty("--accent", CONFIG.colors.accent);
+        // Always fixed to stage 3 (4 columns × 6 rows)
+        updateGridColumns();
+      }
+
+      function initAssets() {
+        ASSETS = JSON.parse(document.getElementById("game-assets").textContent);
+        // Sounds
+        if (ASSETS.sounds.match) loadedSounds.match = new Audio(ASSETS.sounds.match);
+        if (ASSETS.sounds.flip) loadedSounds.flip = new Audio(ASSETS.sounds.flip);
+        if (ASSETS.sounds.fail) loadedSounds.fail = new Audio(ASSETS.sounds.fail);
+      }
+
+      // Game state
+      let deck = []; // array of {id, key}
+      let firstPick = null;
+      let lock = false;
+      let matches = 0;
+      let timerId = null;
+      let remainSeconds = 0;
+
+      function updateGridColumns() {
+        const grid = document.getElementById("grid");
+        if (!grid) return;
+        // 常にステージ3（4列×6行）で固定
+        grid.style.gridTemplateColumns = `repeat(4, 1fr)`;
+        grid.style.gridTemplateRows = `repeat(6, 1fr)`;
+        grid.style.gap = "6px";
+      }
+
+      // Function to mint a random image
+      function mintRandomImage() {
+        const allImages = Object.keys(ASSETS.symbols); // Base_1 to Base_15
+        const availableImages = allImages.filter(key => {
+          // Only images not in collection
+          const collection = getCollection();
+          return !collection.includes(key);
+        });
+
+        if (availableImages.length === 0) {
+          // All images acquired
+          return null;
+        }
+
+        // Select one randomly
+        const randomIndex = Math.floor(Math.random() * availableImages.length);
+        const selectedKey = availableImages[randomIndex];
+        
+        // Add to collection
+        const isNew = addToCollection(selectedKey);
+        if (isNew) {
+          return selectedKey;
+        }
+        return null;
+      }
+
+      // Show mint notification
+      function showMintNotification(imageKey) {
+        const notification = document.getElementById("mint-notification");
+        const img = document.getElementById("mint-notification-img");
+        const name = document.getElementById("mint-notification-name");
+        
+        const symbol = ASSETS.symbols[imageKey];
+        if (symbol && symbol.image) {
+          img.src = symbol.image;
+          name.textContent = symbol.label || imageKey;
+          notification.classList.add("active");
+          
+          // Hide automatically after 3 seconds
+          setTimeout(() => {
+            notification.classList.remove("active");
+          }, 3000);
+        }
+      }
+
+      function handleGameComplete() {
+        stopTimer();
+        
+        // If cleared within time limit, mint image
+        const mintedKey = mintRandomImage();
+        if (mintedKey) {
+          showMintNotification(mintedKey);
+          // Update gallery
+          renderGallery();
+        }
+        endGame();
+      }
+
+      // UI refs
+      const $ = (s) => document.querySelector(s);
+
+      function pickSymbolsForBoard() {
+        // Prioritize collected images
+        const collection = getCollection();
+        const totalPairs = (4 * 6) / 2; // Stage 3 is always 4 columns × 6 rows = 24 cards = 12 pairs
+        const pool = [
+          "Base_1",
+          "Base_2",
+          "Base_3",
+          "Base_4",
+          "Base_5",
+          "Base_6",
+          "Base_7",
+          "Base_8",
+          "Base_9",
+          "Base_10",
+          "Base_11",
+          "Base_12",
+          "Base_13",
+          "Base_14",
+          "Base_15",
+        ];
+        
+        // Put collected images first
+        const collected = pool.filter(key => collection.includes(key));
+        const notCollected = pool.filter(key => !collection.includes(key));
+        const prioritizedPool = [...collected, ...notCollected];
+        
+        // shuffle prioritized pool
+        for (let i = prioritizedPool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [prioritizedPool[i], prioritizedPool[j]] = [prioritizedPool[j], prioritizedPool[i]];
+        }
+        const selected = prioritizedPool.slice(0, Math.min(totalPairs, prioritizedPool.length));
+        return selected;
+      }
+
+      function buildDeck() {
+        const selected = pickSymbolsForBoard();
+        const pairCards = [];
+        let uid = 0;
+        selected.forEach((key) => {
+          pairCards.push({ id: uid++, key });
+          pairCards.push({ id: uid++, key });
+        });
+        // If grid has odd count (shouldn't), trim
+        const need = CONFIG.gameplay.cols * CONFIG.gameplay.rows;
+        while (pairCards.length > need) pairCards.pop();
+        // shuffle deck
+        for (let i = pairCards.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pairCards[i], pairCards[j]] = [pairCards[j], pairCards[i]];
+        }
+        deck = pairCards;
+      }
+
+      function renderGrid() {
+        const grid = $("#grid");
+        grid.innerHTML = "";
+        deck.forEach((card, index) => {
+          const el = document.createElement("button");
+          el.className = "card";
+          el.setAttribute("role", "gridcell");
+          el.setAttribute("aria-label", "Card");
+          el.dataset.index = String(index);
+          el.innerHTML = `
+          <div class="card-inner">
+            <div class="card-face card-front" aria-label="Card back"></div>
+            <div class="card-face card-back">${symbolHTML(card.key)}</div>
+          </div>
+        `;
+          el.addEventListener("click", onCardClick);
+          grid.appendChild(el);
+        });
+      }
+
+      function symbolHTML(key) {
+        const sym = ASSETS.symbols[key] || { label: key, image: "" };
+        const img = sym.image && sym.image.trim();
+        const alt = sym.label || key;
+        const src = img ? img : svgPlaceholder(key);
+        return `<img src="${src}" alt="${alt}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;border:none;outline:none;"/>`;
+      }
+
+      function svgPlaceholder(key) {
+        // Deterministic pastel color based on key
+        const colors = [
+          "#93c5fd",
+          "#60a5fa",
+          "#3b82f6",
+          "#1d4ed8",
+          "#38bdf8",
+          "#0ea5e9",
+          "#22d3ee",
+          "#2563eb",
+          "#1e40af",
+        ];
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) {
+          hash = (hash << 5) - hash + key.charCodeAt(i);
+          hash |= 0;
+        }
+        const bg = colors[Math.abs(hash) % colors.length];
+        const label = key.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const svg = `<?xml version='1.0' encoding='UTF-8'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'>\n  <defs>\n    <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>\n      <stop offset='0%' stop-color='${bg}' stop-opacity='0.95'/>\n      <stop offset='100%' stop-color='#0b0b0e' stop-opacity='0.4'/>\n    </linearGradient>\n  </defs>\n  <rect x='0' y='0' width='300' height='300' rx='24' fill='url(#g)' />\n  <text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-family='system-ui,Segoe UI,Roboto,sans-serif' font-size='36' fill='#ffffff' font-weight='700'>${label}</text>\n</svg>`;
+        return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+      }
+
+      function flipCardElement(el, flipped) {
+        if (flipped) el.classList.add("flipped");
+        else el.classList.remove("flipped");
+      }
+
+      function playSnd(name) {
+        if (isMuted) return;
+        const s = loadedSounds[name];
+        if (s) {
+          try {
+            s.currentTime = 0;
+            s.play();
+          } catch (e) {}
+        }
+      }
+
+      function onCardClick(e) {
+        if (!gameStarted || lock) return;
+        const cardEl = e.currentTarget.closest(".card");
+        const idx = Number(cardEl.dataset.index);
+        const card = deck[idx];
+        if (!card || cardEl.classList.contains("flipped") || card.matched) return;
+
+        playSnd("flip");
+        flipCardElement(cardEl, true);
+
+        if (!firstPick) {
+          firstPick = { idx, key: card.key };
+          return;
+        }
+
+        const prevEl = document.querySelector(`.card[data-index="${firstPick.idx}"]`);
+        if (firstPick.key === card.key) {
+          // Match!
+          card.matched = true;
+          deck[firstPick.idx].matched = true;
+          markMatched(prevEl);
+          markMatched(cardEl);
+          matches += 1;
+          playSnd("match");
+          firstPick = null;
+          
+          // Clear when all cards are matched
+          if (matches === deck.length / 2) {
+            handleGameComplete();
+          }
+        } else {
+          // Not match
+          playSnd("fail");
+          lock = true;
+          const a = prevEl;
+          const b = cardEl;
+          setTimeout(() => {
+            flipCardElement(a, false);
+            flipCardElement(b, false);
+            lock = false;
+          }, CONFIG.gameplay.flipDelayMs);
+          firstPick = null;
+        }
+      }
+
+      function markMatched(el) {
+        el.classList.add("matched");
+      }
+
+
+      function startTimer() {
+        if (!CONFIG.ui.showTimer) {
+          $(".timer").style.display = "none";
+          return;
+        }
+        stopTimer();
+        const limit = Number(CONFIG.gameplay.timeLimitSec || 100);
+        const endAt = performance.now() + limit * 1000;
+        const tick = (now) => {
+          let remain = Math.max(0, endAt - now);
+          const sec = remain / 1000;
+          remainSeconds = sec;
+          $("#time").textContent = sec.toFixed(1);
+          if (!gameStarted) {
+            return;
+          }
+          if (remain <= 0) {
+            $("#time").textContent = "0.0";
+            endGame();
+            return;
+          }
+          timerId = requestAnimationFrame(tick);
+        };
+        timerId = requestAnimationFrame(tick);
+      }
+      function stopTimer() {
+        if (timerId) cancelAnimationFrame(timerId);
+        timerId = null;
+      }
+
+      function resetGame() {
+        matches = 0;
+        firstPick = null;
+        lock = false;
+        buildDeck();
+        renderGrid();
+      }
+
+      function showStartScreen() {
+        const overlay = $("#overlay");
+        overlay.classList.remove("game-over");
+        
+        // Recreate start button if it doesn't exist
+        let startBtn = $("#btn-start");
+        if (!startBtn) {
+          startBtn = document.createElement("button");
+          startBtn.id = "btn-start";
+          startBtn.className = "ui";
+          startBtn.setAttribute("type", "button");
+          startBtn.setAttribute("aria-label", "START");
+          startBtn.textContent = "START";
+          overlay.insertBefore(startBtn, overlay.firstChild);
+          startBtn.addEventListener("click", () => {
+            startGame();
+          });
+        }
+        
+        // Show start button
+        startBtn.style.display = "inline-block";
+        startBtn.style.visibility = "visible";
+        startBtn.style.opacity = "1";
+        startBtn.style.pointerEvents = "auto";
+        startBtn.hidden = false;
+        
+        $("#btn-play-again").hidden = true;
+        $("#btn-share-farcaster").hidden = true;
+        // Hide game over message
+        $("#game-over-message").style.display = "none";
+        // Start screen background image
+        overlay.style.background = "";
+        overlay.style.backgroundImage = "url('images/base_top.JPG')";
+        overlay.style.backgroundSize = "cover";
+        overlay.style.backgroundPosition = "center";
+        overlay.style.backgroundRepeat = "no-repeat";
+        overlay.hidden = false;
+        overlay.style.display = "grid";
+      }
+
+      // Share to Farcaster
+      function shareToFarcaster() {
+        const collection = getCollection();
+        const collectedCount = collection.length;
+        const totalImages = 15;
+        const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${window.location.href}`;
+        
+        // Check if Farcaster Mini App SDK is available
+        if (window.farcaster && window.farcaster.sdk) {
+          try {
+            // Use Farcaster SDK's composeCast action
+            window.farcaster.sdk.actions.composeCast({
+              text: shareText,
+              embeds: [window.location.href]
+            });
+            return;
+          } catch (e) {
+            console.warn("Farcaster SDK error:", e);
+            // Fallback to clipboard
+            copyToClipboard(shareText);
+          }
+        } else {
+          // Fallback: Copy to clipboard or open share dialog
+          if (navigator.share) {
+            // Use Web Share API if available
+            navigator.share({
+              title: "Based Matching Game",
+              text: shareText,
+              url: window.location.href
+            }).catch(() => {
+              // If share fails, copy to clipboard
+              copyToClipboard(shareText);
+            });
+          } else {
+            // Copy to clipboard
+            copyToClipboard(shareText);
+          }
+        }
+      }
+
+      function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+          alert("Share text copied to clipboard! Paste it in Farcaster.");
+        }).catch(() => {
+          // Fallback for older browsers
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          try {
+            document.execCommand("copy");
+            alert("Share text copied to clipboard! Paste it in Farcaster.");
+          } catch (e) {
+            prompt("Copy this text to share on Farcaster:", text);
+          }
+          document.body.removeChild(textarea);
+        });
+      }
+
+      // Connect wallet
+      async function connectWallet() {
+        if (typeof window.ethereum !== "undefined") {
+          try {
+            // Request account access
+            const accounts = await window.ethereum.request({
+              method: "eth_requestAccounts"
+            });
+            
+            // Switch to Base chain
+            await switchToBaseChain();
+            
+            return accounts[0];
+          } catch (error) {
+            console.error("Wallet connection error:", error);
+            throw error;
+          }
+        } else {
+          // Try Farcaster SDK wallet connection
+          if (window.farcaster && window.farcaster.sdk) {
+            try {
+              // Request wallet through Farcaster SDK
+              const wallet = await window.farcaster.sdk.actions.requestWallet();
+              return wallet.address;
+            } catch (e) {
+              console.error("Farcaster wallet error:", e);
+            }
+          }
+          throw new Error("Please install MetaMask or use Farcaster client");
+        }
+      }
+
+      // Switch to Base chain
+      async function switchToBaseChain() {
+        if (typeof window.ethereum !== "undefined") {
+          try {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: `0x${BASE_CHAIN_ID.toString(16)}` }]
+            });
+          } catch (switchError) {
+            // If chain doesn't exist, add it
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: `0x${BASE_CHAIN_ID.toString(16)}`,
+                  chainName: "Base",
+                  nativeCurrency: {
+                    name: "Ether",
+                    symbol: "ETH",
+                    decimals: 18
+                  },
+                  rpcUrls: [BASE_RPC_URL],
+                  blockExplorerUrls: ["https://basescan.org"]
+                }]
+              });
+            } else {
+              throw switchError;
+            }
+          }
+        }
+      }
+
+      // Upload image to IPFS (simplified - you may want to use a service like Pinata)
+      async function uploadToIPFS(imageUrl, imageKey) {
+        // For now, return the image URL as tokenURI
+        // In production, you should upload to IPFS and return the IPFS hash
+        // Example: return `ipfs://Qm...` 
+        return imageUrl;
+      }
+
+      // Mint NFT on Base chain
+      async function mintNFT(imageKey) {
+        try {
+          // Check if already minted
+          const mintedImages = getMintedImages();
+          if (mintedImages.includes(imageKey)) {
+            alert("This image has already been minted!");
+            return;
+          }
+
+          // Check if image is in collection
+          const collection = getCollection();
+          if (!collection.includes(imageKey)) {
+            alert("You need to collect this image first!");
+            return;
+          }
+
+          // Connect wallet
+          const address = await connectWallet();
+          if (!address) {
+            alert("Please connect your wallet first!");
+            return;
+          }
+
+          // Get image data
+          const symbol = ASSETS.symbols[imageKey];
+          if (!symbol || !symbol.image) {
+            alert("Image data not found!");
+            return;
+          }
+
+          // Show loading
+          const mintBtn = document.querySelector(`.mint-button[data-image-key="${imageKey}"]`);
+          if (mintBtn) {
+            mintBtn.disabled = true;
+            mintBtn.textContent = "Minting...";
+          }
+
+          // Setup provider and signer
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          
+          // Create contract instance
+          const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
+
+          // Upload image to IPFS (or use image URL)
+          const tokenURI = await uploadToIPFS(symbol.image, imageKey);
+
+          // Mint NFT
+          const tx = await contract.mint(address, tokenURI);
+          
+          // Wait for transaction
+          await tx.wait();
+
+          // Save minted image
+          saveMintedImage(imageKey);
+
+          // Update UI
+          if (mintBtn) {
+            mintBtn.textContent = "Minted ✓";
+            mintBtn.disabled = true;
+          }
+          
+          // Refresh gallery
+          renderGallery();
+
+          alert(`NFT minted successfully! Transaction: ${tx.hash}\nView on BaseScan: https://basescan.org/tx/${tx.hash}`);
+          
+        } catch (error) {
+          console.error("Minting error:", error);
+          alert(`Minting failed: ${error.message || "Unknown error"}`);
+          
+          // Reset button
+          const mintBtn = document.querySelector(`.mint-button[data-image-key="${imageKey}"]`);
+          if (mintBtn) {
+            mintBtn.disabled = false;
+            mintBtn.textContent = "Mint NFT";
+          }
+        }
+      }
+
+      function startGame() {
+        // Start with stage 3 (4 columns × 6 rows)
+        stopTimer();
+        updateGridColumns();
+        matches = 0;
+        firstPick = null;
+        lock = false;
+        buildDeck();
+        renderGrid();
+        gameStarted = true;
+        startTimer();
+        const overlay = $("#overlay");
+        overlay.hidden = true;
+        overlay.style.display = "none";
+      }
+
+      function endGame() {
+        gameStarted = false;
+        stopTimer();
+        // Show overlay
+        const overlay = $("#overlay");
+        overlay.style.background = "rgba(0,0,0,0.6)";
+        overlay.style.backgroundSize = "";
+        overlay.style.backgroundPosition = "";
+        overlay.classList.add("game-over");
+        
+        // Hide start button completely
+        const startBtn = $("#btn-start");
+        if (startBtn) {
+          startBtn.style.display = "none";
+          startBtn.style.visibility = "hidden";
+          startBtn.style.opacity = "0";
+          startBtn.style.pointerEvents = "none";
+          startBtn.hidden = true;
+        }
+        
+        // Show play again button
+        const playAgainBtn = $("#btn-play-again");
+        playAgainBtn.hidden = false;
+        playAgainBtn.style.display = "inline-block";
+        playAgainBtn.style.visibility = "visible";
+        playAgainBtn.style.opacity = "1";
+        playAgainBtn.style.pointerEvents = "auto";
+        
+        // Show share button
+        const shareBtn = $("#btn-share-farcaster");
+        shareBtn.hidden = false;
+        shareBtn.style.display = "inline-block";
+        shareBtn.style.visibility = "visible";
+        shareBtn.style.opacity = "1";
+        shareBtn.style.pointerEvents = "auto";
+        
+        // Show game over message
+        const gameOverMessage = $("#game-over-message");
+        gameOverMessage.textContent = "GAME OVER";
+        gameOverMessage.style.display = "block";
+        
+        overlay.hidden = false;
+        overlay.style.display = "grid";
+      }
+
+
+      // Show gallery
+      function showGallery() {
+        const overlay = document.getElementById("gallery-overlay");
+        overlay.classList.add("active");
+        renderGallery();
+      }
+
+      // Close gallery
+      function closeGallery() {
+        const overlay = document.getElementById("gallery-overlay");
+        overlay.classList.remove("active");
+      }
+
+      // Render gallery
+      function renderGallery() {
+        const grid = document.getElementById("gallery-grid");
+        grid.innerHTML = "";
+        
+        const collection = getCollection();
+        const mintedImages = getMintedImages();
+        const allImages = Object.keys(ASSETS.symbols);
+        
+        allImages.forEach((key) => {
+          const item = document.createElement("div");
+          item.className = "gallery-item";
+          item.dataset.imageKey = key;
+          
+          const symbol = ASSETS.symbols[key];
+          if (collection.includes(key)) {
+            // Acquired
+            const img = document.createElement("img");
+            img.src = symbol.image || "";
+            img.alt = symbol.label || key;
+            item.appendChild(img);
+            
+            // Add mint button if not minted
+            if (!mintedImages.includes(key)) {
+              const mintBtn = document.createElement("button");
+              mintBtn.className = "ui secondary mint-button";
+              mintBtn.textContent = "Mint NFT";
+              mintBtn.dataset.imageKey = key;
+              mintBtn.addEventListener("click", () => mintNFT(key));
+              item.appendChild(mintBtn);
+            } else {
+              item.classList.add("minted");
+            }
+          } else {
+            // Not acquired
+            item.classList.add("locked");
+          }
+          
+          grid.appendChild(item);
+        });
+      }
+
+      function setupEventListeners() {
+        $("#btn-start").addEventListener("click", () => {
+          startGame();
+        });
+        $("#btn-play-again").addEventListener("click", () => {
+          // Hide overlay and start game
+          const overlay = $("#overlay");
+          overlay.hidden = true;
+          overlay.style.display = "none";
+          overlay.classList.remove("game-over");
+          resetGame();
+          startGame();
+        });
+        $("#btn-share-farcaster").addEventListener("click", () => {
+          shareToFarcaster();
+        });
+        $("#btn-restart").addEventListener("click", () => {
+          resetGame();
+          startGame();
+        });
+        $("#btn-top").addEventListener("click", () => {
+          showStartScreen();
+        });
+        $("#btn-gallery").addEventListener("click", () => {
+          showGallery();
+        });
+        $("#btn-close-gallery").addEventListener("click", () => {
+          closeGallery();
+        });
+      }
+
+      function init() {
+        initConfig();
+        initAssets();
+        setupEventListeners();
+
+        // Initialize Farcaster Mini App SDK if available
+        if (window.farcaster && window.farcaster.sdk) {
+          try {
+            window.farcaster.sdk.actions.ready();
+          } catch (e) {
+            console.warn("Farcaster SDK initialization error:", e);
+          }
+        }
+
+        showStartScreen();
+        // Render initial gallery
+        renderGallery();
+        
+        // Check wallet connection on load
+        if (typeof window.ethereum !== "undefined") {
+          window.ethereum.on("accountsChanged", () => {
+            renderGallery();
+          });
+          window.ethereum.on("chainChanged", () => {
+            renderGallery();
+          });
+        }
+      }
+
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        setTimeout(init, 0);
+      } else {
+        window.addEventListener("DOMContentLoaded", init);
+        window.addEventListener("load", init);
+      }
+    </script>
+  </body>
+</html>
