@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Based Matching Game</title>
+    <!-- Favicon / App Icons -->
+    <link rel="icon" href="images/base01.jpg" sizes="any" />
+    <link rel="apple-touch-icon" href="images/base01.jpg" />
+    <!-- Share image (Open Graph / Twitter Card) -->
+    <meta property="og:title" content="Based Matching Game" />
+    <meta property="og:description" content="Match cards, collect images, and mint on Base." />
+    <meta property="og:image" content="images/share.jpg" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Based Matching Game" />
+    <meta name="twitter:description" content="Match cards, collect images, and mint on Base." />
+    <meta name="twitter:image" content="images/share.jpg" />
     <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js"></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
     <style>
@@ -187,18 +199,70 @@
       }
 
       .overlay {
-        position: absolute;
+        position: fixed;
         inset: 0;
         display: grid;
         place-items: center;
         background: rgba(0, 0, 0, 0.6);
         z-index: 10;
+        pointer-events: auto; /* allow clicks on children */
       }
       .overlay.game-over {
         grid-template-rows: auto auto auto;
         align-items: center;
         justify-items: center;
         gap: 15px;
+      }
+      .overlay.start-screen {
+        background: #0000ff;
+        grid-template-rows: auto;
+        place-items: center;
+        gap: 12px;
+        padding: 0;
+      }
+      .start-wrapper {
+        position: fixed;
+        inset: 0;
+        margin: auto;
+        display: grid;
+        place-items: center;
+        width: min(100vw, 420px);
+        height: min(100vh, 720px);
+        aspect-ratio: 2 / 3;
+        z-index: 9999;
+        overflow: visible;
+        pointer-events: auto; /* enable clicks */
+      }
+      .start-frame {
+        display: block;
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 100%;
+        height: 100%;
+        background-image: url("images/base_top.JPG");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        border-radius: 12px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+        z-index: 0;
+        pointer-events: none;
+      }
+      .start-wrapper #btn-start {
+        position: absolute;
+        left: 50% !important;
+        bottom: 260px !important;
+        transform: translateX(-50%) !important;
+        z-index: 10000 !important;
+        margin: 0 !important;
+        pointer-events: auto !important;
+        display: inline-block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        min-width: 180px !important;
+        min-height: 48px !important;
+        padding: 12px 24px !important;
       }
       .overlay.game-over #game-over-message {
         grid-row: 1;
@@ -256,15 +320,17 @@
         margin-left: 8px;
       }
       .gallery-overlay {
-        position: absolute;
+        position: fixed;
         inset: 0;
         display: none;
         place-items: center;
         background: rgba(0, 0, 0, 0.85);
-        z-index: 20;
+        z-index: 20000;
+        pointer-events: auto;
       }
       .gallery-overlay.active {
         display: grid;
+        pointer-events: auto;
       }
       .gallery-panel {
         width: min(90vw, 500px);
@@ -322,6 +388,83 @@
         font-size: 12px;
         font-weight: 700;
         padding: 4px;
+        text-align: center;
+      }
+      /* Preview modal */
+      .preview-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 21000;
+        padding: 16px;
+        pointer-events: auto;
+      }
+      .preview-overlay.active {
+        display: grid;
+        pointer-events: auto;
+      }
+      .preview-panel {
+        width: min(90vw, 520px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+      }
+      .preview-panel img {
+        width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 12px;
+        background: #0c1830;
+      }
+      .preview-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      /* Mint preview modal (on game clear) */
+      .mint-preview-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 21000;
+        padding: 16px;
+        pointer-events: auto;
+      }
+      .mint-preview-overlay.active {
+        display: grid;
+        pointer-events: auto;
+      }
+      .mint-preview-panel {
+        width: min(90vw, 520px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+      }
+      .mint-preview-panel img {
+        width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 12px;
+        background: #0c1830;
+      }
+      .mint-preview-title {
+        font-size: 22px;
+        font-weight: 700;
         text-align: center;
       }
       .mint-button {
@@ -391,51 +534,6 @@
         background: #0000ff !important;
       }
     </style>
-    <style id="assistant-start-button-styles">
-      #btn-start {
-        width: auto !important;
-        max-width: none !important;
-        min-width: 0 !important;
-        min-height: 40px !important;
-        padding: 8px 16px !important;
-        display: inline-block !important;
-        align-self: center !important;
-        flex: 0 0 auto !important;
-        text-transform: uppercase !important;
-        font-size: 16px !important;
-        line-height: 1.2 !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.5px;
-        position: static !important;
-        top: 0 !important;
-        margin-top: 80px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-      }
-    </style>
-    <script>
-      // Ensure the Start button width matches its text at runtime
-      (function applyStartBtnStyles() {
-        const apply = () => {
-          const btn = document.getElementById("btn-start");
-          if (btn) {
-            btn.style.width = "auto";
-            btn.style.maxWidth = "none";
-            btn.style.minWidth = "0";
-            btn.style.padding = "8px 16px";
-            btn.style.display = "inline-block";
-            btn.style.alignSelf = "center";
-            btn.style.flex = "0 0 auto";
-            btn.style.position = "static";
-            btn.style.top = "0";
-            btn.style.marginTop = "80px";
-          }
-        };
-        window.addEventListener("load", apply);
-        setTimeout(apply, 200);
-        document.addEventListener("DOMContentLoaded", apply);
-      })();
-    </script>
 </head>
   <body>
     <div class="game-root">
@@ -453,11 +551,15 @@
         <div id="grid" class="grid" role="grid" aria-label="Memory card grid"></div>
       </div>
 
-      <div id="overlay" class="overlay" hidden>
-        <div id="game-over-message" style="display: none; color: #fff; font-size: 36px; font-weight: 700; text-align: center; width: 100%; grid-row: 1; align-self: center;"></div>
+      <div id="start-wrapper" class="start-wrapper">
+        <div id="start-frame" class="start-frame"></div>
         <button type="button" id="btn-start" class="ui" aria-label="START">
           START
         </button>
+      </div>
+
+      <div id="overlay" class="overlay" hidden>
+        <div id="game-over-message" style="display: none; color: #fff; font-size: 36px; font-weight: 700; text-align: center; width: 100%; grid-row: 1; align-self: center;"></div>
         <button
           type="button"
           id="btn-play-again"
@@ -491,6 +593,31 @@
             <button type="button" id="btn-close-gallery" class="ui">Close</button>
           </div>
         </div>
+      </div>
+
+      <!-- Preview modal for gallery images -->
+      <div id="preview-overlay" class="preview-overlay" aria-hidden="true">
+        <div class="preview-panel">
+          <img id="preview-image" src="" alt="Preview" />
+          <div id="preview-label"></div>
+          <div class="preview-actions">
+            <button type="button" id="preview-mint-btn" class="ui secondary">Mint NFT</button>
+            <button type="button" id="preview-close-btn" class="ui ghost">Close</button>
+          </div>
+        </div>
+
+      <!-- Mint preview modal shown right after game clear -->
+      <div id="mint-preview-overlay" class="mint-preview-overlay" aria-hidden="true">
+        <div class="mint-preview-panel">
+          <div class="mint-preview-title">Congratulations!</div>
+          <img id="mint-preview-image" src="" alt="Mint preview" />
+          <div id="mint-preview-label"></div>
+          <div class="preview-actions">
+            <button type="button" id="mint-preview-mint-btn" class="ui secondary">Mint NFT</button>
+            <button type="button" id="mint-preview-close-btn" class="ui ghost">Close</button>
+          </div>
+        </div>
+      </div>
       </div>
 
       <!-- ミント通知 -->
@@ -800,6 +927,8 @@
           showMintNotification(mintedKey);
           // Update gallery
           renderGallery();
+          // Show mint preview modal
+          openMintPreview(mintedKey);
         }
         endGame();
       }
@@ -1019,43 +1148,71 @@
       }
 
       function showStartScreen() {
+        // Hide game overlay; use standalone start-wrapper for start screen
         const overlay = $("#overlay");
-        overlay.classList.remove("game-over");
-        
-        // Recreate start button if it doesn't exist
-        let startBtn = $("#btn-start");
-        if (!startBtn) {
-          startBtn = document.createElement("button");
-          startBtn.id = "btn-start";
-          startBtn.className = "ui";
-          startBtn.setAttribute("type", "button");
-          startBtn.setAttribute("aria-label", "START");
-          startBtn.textContent = "START";
-          overlay.insertBefore(startBtn, overlay.firstChild);
-          startBtn.addEventListener("click", () => {
-            startGame();
-          });
+        overlay.classList.remove("game-over", "start-screen");
+        overlay.hidden = true;
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+
+        // Close other overlays
+        closePreview();
+        closeMintPreview();
+        closeGallery();
+        const galleryOverlay = document.getElementById("gallery-overlay");
+        if (galleryOverlay) {
+          galleryOverlay.classList.remove("active");
+          galleryOverlay.style.display = "none";
+          galleryOverlay.style.pointerEvents = "none";
         }
-        
-        // Show start button
-        startBtn.style.display = "inline-block";
-        startBtn.style.visibility = "visible";
-        startBtn.style.opacity = "1";
-        startBtn.style.pointerEvents = "auto";
-        startBtn.hidden = false;
-        
-        $("#btn-play-again").hidden = true;
-        $("#btn-share-farcaster").hidden = true;
+        const previewOverlay = document.getElementById("preview-overlay");
+        if (previewOverlay) {
+          previewOverlay.classList.remove("active");
+          previewOverlay.style.display = "none";
+          previewOverlay.style.pointerEvents = "none";
+        }
+        const mintPreviewOverlay = document.getElementById("mint-preview-overlay");
+        if (mintPreviewOverlay) {
+          mintPreviewOverlay.classList.remove("active");
+          mintPreviewOverlay.style.display = "none";
+          mintPreviewOverlay.style.pointerEvents = "none";
+        }
+
+        // Start button and wrapper
+        const startBtn = $("#btn-start");
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper && startBtn && startBtn.parentElement !== startWrapper) {
+          startWrapper.appendChild(startBtn);
+        }
+        if (startWrapper) {
+          startWrapper.style.display = "grid";
+          startWrapper.style.pointerEvents = "auto";
+          startWrapper.style.zIndex = "9999";
+          startWrapper.style.position = "fixed";
+          startWrapper.style.inset = "0";
+          startWrapper.style.margin = "auto";
+        }
+        if (startBtn) {
+          startBtn.disabled = false;
+          startBtn.style.pointerEvents = "auto";
+          startBtn.style.zIndex = "10000";
+          startBtn.style.display = "inline-block";
+          startBtn.style.visibility = "visible";
+          startBtn.style.opacity = "1";
+          startBtn.hidden = false;
+          startBtn.onclick = startGame;
+        }
+
+        // Show start frame
+        const startFrame = $("#start-frame");
+        if (startFrame) {
+          startFrame.style.display = "block";
+          startFrame.style.pointerEvents = "none";
+          startFrame.style.zIndex = "0";
+        }
+
         // Hide game over message
         $("#game-over-message").style.display = "none";
-        // Start screen background image
-        overlay.style.background = "";
-        overlay.style.backgroundImage = "url('images/base_top.JPG')";
-        overlay.style.backgroundSize = "cover";
-        overlay.style.backgroundPosition = "center";
-        overlay.style.backgroundRepeat = "no-repeat";
-        overlay.hidden = false;
-        overlay.style.display = "grid";
       }
 
       // Share to Farcaster
@@ -1253,9 +1410,23 @@
             mintBtn.textContent = "Minted ✓";
             mintBtn.disabled = true;
           }
-          
           // Refresh gallery
           renderGallery();
+
+          // Update preview modal button if open
+          const previewMintBtn = document.getElementById("preview-mint-btn");
+          if (previewMintBtn && previewMintBtn.dataset.imageKey === imageKey) {
+            previewMintBtn.textContent = "Minted ✓";
+            previewMintBtn.disabled = true;
+            previewMintBtn.style.display = "none";
+          }
+          // Update mint preview modal button if open
+          const mintPreviewBtn = document.getElementById("mint-preview-mint-btn");
+          if (mintPreviewBtn && mintPreviewBtn.dataset.imageKey === imageKey) {
+            mintPreviewBtn.textContent = "Minted ✓";
+            mintPreviewBtn.disabled = true;
+            mintPreviewBtn.style.display = "none";
+          }
 
           alert(`NFT minted successfully! Transaction: ${tx.hash}\nView on BaseScan: https://basescan.org/tx/${tx.hash}`);
           
@@ -1273,8 +1444,21 @@
       }
 
       function startGame() {
+        console.log("startGame() invoked");
         // Start with stage 3 (4 columns × 6 rows)
         stopTimer();
+        const overlay = $("#overlay");
+        overlay.classList.remove("start-screen", "game-over");
+        overlay.hidden = true;
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        const startFrame = $("#start-frame");
+        if (startFrame) startFrame.style.display = "none";
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper) {
+          startWrapper.style.display = "none";
+          startWrapper.style.pointerEvents = "none";
+        }
         updateGridColumns();
         matches = 0;
         firstPick = null;
@@ -1283,10 +1467,12 @@
         renderGrid();
         gameStarted = true;
         startTimer();
-        const overlay = $("#overlay");
         overlay.hidden = true;
         overlay.style.display = "none";
       }
+
+      // Expose startGame for inline handler
+      window.startGame = startGame;
 
       function endGame() {
         gameStarted = false;
@@ -1329,6 +1515,12 @@
         gameOverMessage.textContent = "GAME OVER";
         gameOverMessage.style.display = "block";
         
+        // Hide start wrapper and image so it doesn't appear on game over
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper) startWrapper.style.display = "none";
+        const startFrame = $("#start-frame");
+        if (startFrame) startFrame.style.display = "none";
+
         overlay.hidden = false;
         overlay.style.display = "grid";
       }
@@ -1337,6 +1529,15 @@
       // Show gallery
       function showGallery() {
         const overlay = document.getElementById("gallery-overlay");
+        if (!overlay) return;
+        // Hide start wrapper so it doesn't block clicks
+        const startWrapper = document.getElementById("start-wrapper");
+        if (startWrapper) {
+          startWrapper.style.display = "none";
+          startWrapper.style.pointerEvents = "none";
+        }
+        overlay.style.display = "grid";
+        overlay.style.pointerEvents = "auto";
         overlay.classList.add("active");
         renderGallery();
       }
@@ -1344,7 +1545,11 @@
       // Close gallery
       function closeGallery() {
         const overlay = document.getElementById("gallery-overlay");
+        if (!overlay) return;
         overlay.classList.remove("active");
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        closePreview();
       }
 
       // Render gallery
@@ -1375,11 +1580,17 @@
               mintBtn.className = "ui secondary mint-button";
               mintBtn.textContent = "Mint NFT";
               mintBtn.dataset.imageKey = key;
-              mintBtn.addEventListener("click", () => mintNFT(key));
+              mintBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                mintNFT(key);
+              });
               item.appendChild(mintBtn);
             } else {
               item.classList.add("minted");
             }
+            
+            // Click to preview (only if collected)
+            item.addEventListener("click", () => openPreview(key));
           } else {
             // Not acquired
             item.classList.add("locked");
@@ -1387,6 +1598,89 @@
           
           grid.appendChild(item);
         });
+      }
+
+      function openPreview(imageKey) {
+        const symbol = ASSETS.symbols[imageKey];
+        if (!symbol) return;
+        const overlay = document.getElementById("preview-overlay");
+        const img = document.getElementById("preview-image");
+        const label = document.getElementById("preview-label");
+        const mintBtn = document.getElementById("preview-mint-btn");
+        
+        const collection = getCollection();
+        const mintedImages = getMintedImages();
+        const isCollected = collection.includes(imageKey);
+        const isMinted = mintedImages.includes(imageKey);
+        
+        if (isCollected) {
+          img.src = symbol.image || "";
+          label.textContent = symbol.label || imageKey;
+          if (!isMinted) {
+            mintBtn.style.display = "inline-block";
+            mintBtn.disabled = false;
+            mintBtn.dataset.imageKey = imageKey;
+            mintBtn.textContent = "Mint NFT";
+            mintBtn.onclick = () => mintNFT(imageKey);
+          } else {
+            mintBtn.style.display = "none";
+            mintBtn.onclick = null;
+          }
+        } else {
+          img.src = "";
+          label.textContent = "Locked";
+          mintBtn.style.display = "none";
+          mintBtn.onclick = null;
+        }
+        
+        // Show overlay with pointer events
+        overlay.style.display = "grid";
+        overlay.style.pointerEvents = "auto";
+        overlay.classList.add("active");
+        overlay.setAttribute("aria-hidden", "false");
+      }
+      
+      function closePreview() {
+        const overlay = document.getElementById("preview-overlay");
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        overlay.classList.remove("active");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+
+      function openMintPreview(imageKey) {
+        const symbol = ASSETS.symbols[imageKey];
+        if (!symbol) return;
+        const overlay = document.getElementById("mint-preview-overlay");
+        const img = document.getElementById("mint-preview-image");
+        const label = document.getElementById("mint-preview-label");
+        const mintBtn = document.getElementById("mint-preview-mint-btn");
+        
+        const mintedImages = getMintedImages();
+        const isMinted = mintedImages.includes(imageKey);
+        
+        img.src = symbol.image || "";
+        label.textContent = symbol.label || imageKey;
+        mintBtn.dataset.imageKey = imageKey;
+        
+        if (!isMinted) {
+          mintBtn.style.display = "inline-block";
+          mintBtn.disabled = false;
+          mintBtn.textContent = "Mint NFT";
+          mintBtn.onclick = () => mintNFT(imageKey);
+        } else {
+          mintBtn.style.display = "none";
+          mintBtn.onclick = null;
+        }
+        
+        overlay.classList.add("active");
+        overlay.setAttribute("aria-hidden", "false");
+      }
+      
+      function closeMintPreview() {
+        const overlay = document.getElementById("mint-preview-overlay");
+        overlay.classList.remove("active");
+        overlay.setAttribute("aria-hidden", "true");
       }
 
       function setupEventListeners() {
@@ -1417,6 +1711,24 @@
         });
         $("#btn-close-gallery").addEventListener("click", () => {
           closeGallery();
+        });
+        // Preview modal controls
+        $("#preview-close-btn").addEventListener("click", () => {
+          closePreview();
+        });
+        $("#preview-overlay").addEventListener("click", (e) => {
+          if (e.target.id === "preview-overlay") {
+            closePreview();
+          }
+        });
+        // Mint preview controls
+        $("#mint-preview-close-btn").addEventListener("click", () => {
+          closeMintPreview();
+        });
+        $("#mint-preview-overlay").addEventListener("click", (e) => {
+          if (e.target.id === "mint-preview-overlay") {
+            closeMintPreview();
+          }
         });
       }
 
@@ -1458,3 +1770,4 @@
     </script>
   </body>
 </html>
+bo
