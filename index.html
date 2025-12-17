@@ -228,10 +228,12 @@
         left: 0;
         right: 0;
         bottom: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        min-width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100vw;
+        height: 100vh;
+        min-width: 100vw;
         min-height: 100vh;
         z-index: 9999;
         overflow: visible;
@@ -244,9 +246,9 @@
         left: 0;
         right: 0;
         bottom: 0;
-        width: 100%;
-        height: 100%;
-        min-width: 100%;
+        width: 100vw;
+        height: 100vh;
+        min-width: 100vw;
         min-height: 100vh;
         background-image: url("images/base_top.JPG");
         background-size: cover;
@@ -1191,7 +1193,9 @@
           startWrapper.appendChild(startBtn);
         }
         if (startWrapper) {
-          startWrapper.style.display = "grid";
+          startWrapper.style.display = "flex";
+          startWrapper.style.alignItems = "center";
+          startWrapper.style.justifyContent = "center";
           startWrapper.style.pointerEvents = "auto";
           startWrapper.style.zIndex = "9999";
           startWrapper.style.position = "absolute";
@@ -1199,9 +1203,9 @@
           startWrapper.style.left = "0";
           startWrapper.style.right = "0";
           startWrapper.style.bottom = "0";
-          startWrapper.style.width = "100%";
-          startWrapper.style.height = "100%";
-          startWrapper.style.minWidth = "100%";
+          startWrapper.style.width = "100vw";
+          startWrapper.style.height = "100vh";
+          startWrapper.style.minWidth = "100vw";
           startWrapper.style.minHeight = "100vh";
         }
         if (startBtn) {
@@ -1224,10 +1228,13 @@
           startFrame.style.left = "0";
           startFrame.style.right = "0";
           startFrame.style.bottom = "0";
-          startFrame.style.width = "100%";
-          startFrame.style.height = "100%";
-          startFrame.style.minWidth = "100%";
+          startFrame.style.width = "100vw";
+          startFrame.style.height = "100vh";
+          startFrame.style.minWidth = "100vw";
           startFrame.style.minHeight = "100vh";
+          startFrame.style.backgroundSize = "cover";
+          startFrame.style.backgroundPosition = "center";
+          startFrame.style.backgroundRepeat = "no-repeat";
           startFrame.style.pointerEvents = "none";
           startFrame.style.zIndex = "0";
         }
