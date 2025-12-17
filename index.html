@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="base:app_id" content="6942e241d19763ca26ddc3a7" />
     <title>Based Matching Game</title>
     <!-- Favicon / App Icons -->
     <link rel="icon" href="images/base01.jpg" sizes="any" />
@@ -222,14 +221,15 @@
         padding: 0;
       }
       .start-wrapper {
-        position: fixed;
-        inset: 0;
-        margin: auto;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         display: grid;
         place-items: center;
-        width: min(100vw, 420px);
-        height: min(100vh, 720px);
-        aspect-ratio: 2 / 3;
+        width: 100%;
+        height: 100%;
         z-index: 9999;
         overflow: visible;
         pointer-events: auto; /* enable clicks */
@@ -237,8 +237,10 @@
       .start-frame {
         display: block;
         position: absolute;
-        inset: 0;
-        margin: auto;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         width: 100%;
         height: 100%;
         background-image: url("images/base_top.JPG");
@@ -1189,9 +1191,13 @@
           startWrapper.style.display = "grid";
           startWrapper.style.pointerEvents = "auto";
           startWrapper.style.zIndex = "9999";
-          startWrapper.style.position = "fixed";
-          startWrapper.style.inset = "0";
-          startWrapper.style.margin = "auto";
+          startWrapper.style.position = "absolute";
+          startWrapper.style.top = "0";
+          startWrapper.style.left = "0";
+          startWrapper.style.right = "0";
+          startWrapper.style.bottom = "0";
+          startWrapper.style.width = "100%";
+          startWrapper.style.height = "100%";
         }
         if (startBtn) {
           startBtn.disabled = false;
@@ -1771,4 +1777,3 @@
     </script>
   </body>
 </html>
-bo
