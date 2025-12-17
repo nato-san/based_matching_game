@@ -3,8 +3,7 @@
     "header": "eyJmaWQiOjU5Nzk0MSwidHlwZSI6ImF1dGgiLCJrZXkiOiIweGJjMUVCRDI2M0FBNGFDMUZERjgzNDYzMjEzNWQ3NGNFYTE0OWVDRjYifQ",
     "payload": "eyJkb21haW4iOiJiYXNlZC1tYXRjaGluZy1nYW1lLTMyeHMudmVyY2VsLmFwcCJ9",
     "signature": "nrTA1f1K1gRwnY77+i+zCiVvpPz9TbEWpWz0vK2doAMLFq5Cm+nUBNu65PJ8OQ3lnc48IavolFXOYwioHibvlBs="
-  }
-},
+  },
   "miniapp": {
     "version": "1",
     "name": "Based Matching Game",
