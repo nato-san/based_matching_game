@@ -13,7 +13,7 @@
     <meta name="twitter:title" content="Based Matching Game" />
     <meta name="twitter:description" content="Match cards, collect images, and mint on Base." />
     <meta name="twitter:image" content="images/share.jpg" />
-    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js" defer></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
     <style>
       :root {
@@ -1948,7 +1948,7 @@
       }
 
       // Wait for Farcaster SDK to be available
-      async function waitForFarcasterSDK(maxAttempts = 50) {
+      async function waitForFarcasterSDK(maxAttempts = 100) {
         for (let i = 0; i < maxAttempts; i++) {
           if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
             return true;
@@ -1956,6 +1956,31 @@
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         return false;
+      }
+
+      // Call ready() to hide splash screen
+      async function callFarcasterReady() {
+        try {
+          // Check if we're in a Farcaster client
+          const sdkAvailable = await waitForFarcasterSDK();
+          if (sdkAvailable) {
+            try {
+              await window.farcaster.sdk.actions.ready();
+              console.log("Farcaster SDK ready() called successfully");
+              return true;
+            } catch (e) {
+              console.warn("Farcaster SDK ready() error:", e);
+              // Even if ready() fails, continue to show the app
+              return false;
+            }
+          } else {
+            console.log("Farcaster SDK not available (running in regular browser)");
+            return false;
+          }
+        } catch (e) {
+          console.warn("Error checking Farcaster SDK:", e);
+          return false;
+        }
       }
 
       async function init() {
@@ -1966,18 +1991,9 @@
         // Show start screen first
         showStartScreen();
 
-        // Wait for Farcaster SDK to be available and call ready()
-        const sdkAvailable = await waitForFarcasterSDK();
-        if (sdkAvailable) {
-          try {
-            await window.farcaster.sdk.actions.ready();
-            console.log("Farcaster SDK ready() called successfully");
-          } catch (e) {
-            console.warn("Farcaster SDK initialization error:", e);
-          }
-        } else {
-          console.warn("Farcaster SDK not available after waiting");
-        }
+        // Call ready() to hide splash screen (if in Farcaster client)
+        // This must be called to hide the loading screen
+        await callFarcasterReady();
 
         // Ensure start screen is still visible after ready()
         showStartScreen();
