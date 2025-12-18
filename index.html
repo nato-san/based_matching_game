@@ -466,6 +466,9 @@
         display: grid;
         pointer-events: auto;
       }
+      #preview-label {
+        display: none; /* Hide file name text */
+      }
       .preview-panel {
         width: min(90vw, 520px);
         background: linear-gradient(180deg, #173257, #0f2747);
@@ -1915,7 +1918,7 @@
         
         if (isCollected) {
           img.src = symbol.image || "";
-          label.textContent = symbol.label || imageKey;
+          label.textContent = ""; // Remove file name text
           if (!isMinted) {
             mintBtn.style.display = "inline-block";
             mintBtn.disabled = false;
