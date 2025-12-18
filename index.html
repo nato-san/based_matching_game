@@ -225,7 +225,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        display: flex;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         width: 100vw;
@@ -235,6 +235,8 @@
         z-index: 9999;
         overflow: visible;
         pointer-events: auto;
+        visibility: visible !important;
+        opacity: 1 !important;
       }
       .start-frame {
         display: block;
@@ -1762,6 +1764,9 @@
         initAssets();
         setupEventListeners();
 
+        // Show start screen first (before ready() to ensure it's visible)
+        showStartScreen();
+
         // Initialize Farcaster Mini App SDK if available
         if (window.farcaster && window.farcaster.sdk) {
           try {
@@ -1771,6 +1776,7 @@
           }
         }
 
+        // Ensure start screen is still visible after ready()
         showStartScreen();
         // Render initial gallery
         renderGallery();
