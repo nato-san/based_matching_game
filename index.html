@@ -38,7 +38,29 @@
     
     <!-- Fallback: Also load via CDN for compatibility -->
     <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js" onload="console.log('SDK loaded via CDN')"></script>
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <!-- Ethers.js - Use reliable CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+      // Verify ethers.js is loaded
+      (function() {
+        let attempts = 0;
+        const maxAttempts = 100;
+        function checkEthers() {
+          attempts++;
+          if (typeof ethers !== "undefined") {
+            console.log("✅ Ethers.js loaded successfully");
+            return;
+          }
+          if (attempts < maxAttempts) {
+            setTimeout(checkEthers, 100);
+          } else {
+            console.error("❌ Ethers.js failed to load after", maxAttempts, "attempts");
+          }
+        }
+        // Start checking after a short delay
+        setTimeout(checkEthers, 100);
+      })();
+    </script>
     <style>
       :root {
         color-scheme: light dark;
@@ -1260,42 +1282,69 @@
       }
 
       // Share to Farcaster
-      function shareToFarcaster() {
-        const collection = getCollection();
-        const collectedCount = collection.length;
-        const totalImages = 15;
-        const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${window.location.href}`;
-        
-        // Check if Farcaster Mini App SDK is available
-        if (window.farcaster && window.farcaster.sdk) {
-          try {
-            // Use Farcaster SDK's composeCast action
-            window.farcaster.sdk.actions.composeCast({
-              text: shareText,
-              embeds: [window.location.href]
-            });
-            return;
-          } catch (e) {
-            console.warn("Farcaster SDK error:", e);
-            // Fallback to clipboard
-            copyToClipboard(shareText);
+      async function shareToFarcaster() {
+        try {
+          const collection = getCollection();
+          const collectedCount = collection.length;
+          const totalImages = 15;
+          const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${window.location.href}`;
+          
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.composeCast === 'function') {
+            try {
+              await window.farcasterSDK.actions.composeCast({
+                text: shareText,
+                embeds: [window.location.href]
+              });
+              console.log("✅ Share via ESM SDK successful");
+              return;
+            } catch (e) {
+              console.warn("⚠️ ESM SDK composeCast error:", e);
+              // Continue to fallback
+            }
           }
-        } else {
+          
+          // Check CDN loaded SDK
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            if (typeof window.farcaster.sdk.actions.composeCast === 'function') {
+              try {
+                await window.farcaster.sdk.actions.composeCast({
+                  text: shareText,
+                  embeds: [window.location.href]
+                });
+                console.log("✅ Share via CDN SDK successful");
+                return;
+              } catch (e) {
+                console.warn("⚠️ CDN SDK composeCast error:", e);
+                // Continue to fallback
+              }
+            }
+          }
+          
           // Fallback: Copy to clipboard or open share dialog
+          console.log("ℹ️ Farcaster SDK not available, using fallback");
           if (navigator.share) {
-            // Use Web Share API if available
-            navigator.share({
-              title: "Based Matching Game",
-              text: shareText,
-              url: window.location.href
-            }).catch(() => {
-              // If share fails, copy to clipboard
-              copyToClipboard(shareText);
-            });
-          } else {
-            // Copy to clipboard
-            copyToClipboard(shareText);
+            // Use Web Share API if available (mobile)
+            try {
+              await navigator.share({
+                title: "Based Matching Game",
+                text: shareText,
+                url: window.location.href
+              });
+              console.log("✅ Share via Web Share API successful");
+              return;
+            } catch (err) {
+              console.warn("⚠️ Web Share API failed:", err);
+              // Continue to clipboard fallback
+            }
           }
+          
+          // Final fallback: Copy to clipboard
+          copyToClipboard(shareText);
+          
+        } catch (e) {
+          console.error("❌ Share function error:", e);
+          alert("Failed to share. Please try again.");
         }
       }
 
@@ -1472,11 +1521,23 @@
       // Mint NFT on Base chain
       async function mintNFT(imageKey) {
         try {
-          // Check if ethers is loaded
+          // Check if ethers is loaded - wait a bit if not immediately available
           if (typeof ethers === "undefined") {
-            alert("Ethers.js library is not loaded. Please refresh the page and try again.");
-            console.error("ethers is not defined");
-            return;
+            // Wait a bit for ethers to load (especially on mobile)
+            let ethersLoaded = false;
+            for (let i = 0; i < 50; i++) {
+              if (typeof ethers !== "undefined") {
+                ethersLoaded = true;
+                break;
+              }
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            if (!ethersLoaded) {
+              alert("Ethers.js library is not loaded. Please refresh the page and try again.\n\nIf the problem persists, check your internet connection.");
+              console.error("ethers is not defined after waiting");
+              return;
+            }
           }
 
           // Check if already minted
