@@ -1290,14 +1290,15 @@
           const collection = getCollection();
           const collectedCount = collection.length;
           const totalImages = 15;
-          const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${window.location.href}`;
+          const shareUrl = "https://farcaster.xyz/miniapps/kXFgUzYr-DBi/based-matching-game";
+          const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${shareUrl}`;
           
           // Check ESM imported SDK first (preferred)
           if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.composeCast === 'function') {
             try {
               await window.farcasterSDK.actions.composeCast({
                 text: shareText,
-                embeds: [window.location.href]
+                embeds: [shareUrl]
               });
               console.log("✅ Share via ESM SDK successful");
               return;
@@ -1313,7 +1314,7 @@
               try {
                 await window.farcaster.sdk.actions.composeCast({
                   text: shareText,
-                  embeds: [window.location.href]
+                  embeds: [shareUrl]
                 });
                 console.log("✅ Share via CDN SDK successful");
                 return;
@@ -1332,7 +1333,7 @@
               await navigator.share({
                 title: "Based Matching Game",
                 text: shareText,
-                url: window.location.href
+                url: shareUrl
               });
               console.log("✅ Share via Web Share API successful");
               return;
