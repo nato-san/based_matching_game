@@ -795,16 +795,26 @@
       const MINTED_KEY = "based_matching_minted";
       
       // Base chain configuration
-      const BASE_CHAIN_ID = 8453; // Base mainnet
-      const BASE_RPC_URL = "https://mainnet.base.org";
+      const BASE_CHAIN_ID = 84532; // Base Sepolia testnet (change to 8453 for mainnet)
+      const BASE_RPC_URL = "https://sepolia.base.org"; // Base Sepolia testnet (change to https://mainnet.base.org for mainnet)
       // NFT Contract address - UPDATE THIS with your deployed contract address
-      const NFT_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: Replace with your contract address
+      // Deploy contract using: cd contracts && npm install && npm run deploy:base
+      const NFT_CONTRACT_ADDRESS = "0x6F2b1fac723266F9AeA5988e53A83aDc553A31E2"; // Base Sepolia Testnet
       
-      // ERC-721 ABI (minimal for minting)
+      // ERC-721 ABI (for BaseMatchingNFT contract)
       const NFT_ABI = [
         "function mint(address to, string memory tokenURI) public returns (uint256)",
-        "function tokenURI(uint256 tokenId) public view returns (string memory)"
+        "function tokenURI(uint256 tokenId) public view returns (string memory)",
+        "function totalSupply() public view returns (uint256)",
+        "function ownerOf(uint256 tokenId) public view returns (address)",
+        "function balanceOf(address owner) public view returns (uint256)"
       ];
+      
+      // IPFS Configuration (optional - for production)
+      // To use Pinata: https://www.pinata.cloud/
+      const PINATA_API_KEY = ""; // Optional: Your Pinata API Key
+      const PINATA_SECRET_KEY = ""; // Optional: Your Pinata Secret Key
+      const USE_IPFS = false; // Set to true to upload images to IPFS
       
       function getCollection() {
         try {
@@ -1287,6 +1297,9 @@
       }
 
       // Connect wallet
+      let connectedWalletType = null; // 'metamask' or 'farcaster'
+      let farcasterWallet = null;
+      
       async function connectWallet() {
         if (typeof window.ethereum !== "undefined") {
           try {
@@ -1298,6 +1311,7 @@
             // Switch to Base chain
             await switchToBaseChain();
             
+            connectedWalletType = 'metamask';
             return accounts[0];
           } catch (error) {
             console.error("Wallet connection error:", error);
@@ -1309,9 +1323,12 @@
             try {
               // Request wallet through Farcaster SDK
               const wallet = await window.farcaster.sdk.actions.requestWallet();
+              connectedWalletType = 'farcaster';
+              farcasterWallet = wallet;
               return wallet.address;
             } catch (e) {
               console.error("Farcaster wallet error:", e);
+              throw new Error("Failed to connect Farcaster wallet. Please try again.");
             }
           }
           throw new Error("Please install MetaMask or use Farcaster client");
@@ -1350,17 +1367,94 @@
         }
       }
 
-      // Upload image to IPFS (simplified - you may want to use a service like Pinata)
+      // Upload image to IPFS using Pinata (optional)
       async function uploadToIPFS(imageUrl, imageKey) {
-        // For now, return the image URL as tokenURI
-        // In production, you should upload to IPFS and return the IPFS hash
-        // Example: return `ipfs://Qm...` 
-        return imageUrl;
+        if (!USE_IPFS || !PINATA_API_KEY) {
+          // Return image URL directly if IPFS is not configured
+          return imageUrl;
+        }
+        
+        try {
+          // Fetch the image
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          
+          // Create form data
+          const formData = new FormData();
+          formData.append('file', blob, `${imageKey}.jpg`);
+          
+          // Pinata metadata
+          const metadata = JSON.stringify({
+            name: `Based Matching Game - ${imageKey}`,
+            description: `NFT from Based Matching Game - ${imageKey}`,
+            keyvalues: {
+              game: 'based-matching-game',
+              imageKey: imageKey
+            }
+          });
+          formData.append('pinataMetadata', metadata);
+          
+          // Pinata options
+          const pinataOptions = JSON.stringify({
+            cidVersion: 1
+          });
+          formData.append('pinataOptions', pinataOptions);
+          
+          // Upload to Pinata
+          const pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+            method: 'POST',
+            headers: {
+              'pinata_api_key': PINATA_API_KEY,
+              'pinata_secret_api_key': PINATA_SECRET_KEY
+            },
+            body: formData
+          });
+          
+          const pinataData = await pinataResponse.json();
+          
+          if (pinataData.IpfsHash) {
+            return `ipfs://${pinataData.IpfsHash}`;
+          } else {
+            console.warn("IPFS upload failed, using image URL:", pinataData);
+            return imageUrl;
+          }
+        } catch (error) {
+          console.error("IPFS upload error:", error);
+          // Fallback to image URL
+          return imageUrl;
+        }
+      }
+      
+      // Create NFT metadata JSON
+      async function createMetadata(imageUrl, imageKey, tokenURI) {
+        const metadata = {
+          name: `Based Matching Game - ${imageKey}`,
+          description: `NFT collected from Based Matching Game - ${imageKey}`,
+          image: tokenURI.startsWith('ipfs://') ? tokenURI : imageUrl,
+          attributes: [
+            {
+              trait_type: "Game",
+              value: "Based Matching Game"
+            },
+            {
+              trait_type: "Image Key",
+              value: imageKey
+            }
+          ]
+        };
+        return metadata;
       }
 
       // Mint NFT on Base chain
       async function mintNFT(imageKey) {
         try {
+          // Check if ethers is loaded
+          if (typeof ethers === "undefined") {
+            alert("Ethers.js library is not loaded. Please refresh the page and try again.");
+            console.error("ethers is not defined");
+            return;
+          }
+
           // Check if already minted
           const mintedImages = getMintedImages();
           if (mintedImages.includes(imageKey)) {
@@ -1396,21 +1490,81 @@
             mintBtn.textContent = "Minting...";
           }
 
+          // Validate contract address
+          if (NFT_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+            alert("NFT contract address is not set! Please deploy the contract first.\n\nSee contracts/README.md for deployment instructions.");
+            throw new Error("Contract address not set");
+          }
+
           // Setup provider and signer
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const signer = provider.getSigner();
+          let provider, signer, network;
+          
+          if (connectedWalletType === 'farcaster' && farcasterWallet) {
+            // Farcaster SDK wallet - use the wallet's provider if available
+            if (farcasterWallet.provider) {
+              provider = new ethers.providers.Web3Provider(farcasterWallet.provider);
+              signer = provider.getSigner();
+            } else if (window.ethereum) {
+              // Fallback to window.ethereum if available
+              provider = new ethers.providers.Web3Provider(window.ethereum);
+              signer = provider.getSigner();
+            } else {
+              // Farcaster SDK wallet but no provider available
+              // Try to use Farcaster SDK's transaction signing
+              alert("Farcaster wallet is connected, but transaction signing is not fully supported yet.\n\nPlease use MetaMask for NFT minting, or check if your Farcaster client supports wallet transactions.");
+              throw new Error("Farcaster wallet provider not available");
+            }
+          } else if (typeof window.ethereum !== "undefined") {
+            // MetaMask or other Web3 wallet
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+          } else {
+            alert("No wallet provider found. Please install MetaMask or use a Farcaster client with wallet support.");
+            throw new Error("No wallet provider available");
+          }
+          
+          // Verify network
+          network = await provider.getNetwork();
+          if (network.chainId !== BASE_CHAIN_ID) {
+            if (connectedWalletType === 'farcaster') {
+              alert(`Please switch to Base Sepolia network (Chain ID: ${BASE_CHAIN_ID}) in your Farcaster client.\nCurrent network: ${network.chainId}`);
+            } else {
+              alert(`Please switch to Base network (Chain ID: ${BASE_CHAIN_ID})\nCurrent network: ${network.chainId}`);
+              await switchToBaseChain();
+            }
+            // Re-check after switching
+            network = await provider.getNetwork();
+            if (network.chainId !== BASE_CHAIN_ID) {
+              throw new Error("Failed to switch to Base network");
+            }
+          }
           
           // Create contract instance
           const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
+          
+          // Check if contract is deployed
+          try {
+            await contract.totalSupply();
+          } catch (error) {
+            alert("Contract not found at the specified address. Please verify the contract address.");
+            throw new Error("Contract not found");
+          }
 
           // Upload image to IPFS (or use image URL)
           const tokenURI = await uploadToIPFS(symbol.image, imageKey);
+          
+          console.log("Minting NFT with tokenURI:", tokenURI);
 
           // Mint NFT
-          const tx = await contract.mint(address, tokenURI);
+          const tx = await contract.mint(address, tokenURI, {
+            gasLimit: 500000 // Set gas limit to prevent out of gas errors
+          });
           
-          // Wait for transaction
-          await tx.wait();
+          console.log("Transaction sent:", tx.hash);
+          
+          // Wait for transaction confirmation
+          const receipt = await tx.wait();
+          console.log("Transaction confirmed:", receipt);
 
           // Save minted image
           saveMintedImage(imageKey);
@@ -1438,17 +1592,44 @@
             mintPreviewBtn.style.display = "none";
           }
 
-          alert(`NFT minted successfully! Transaction: ${tx.hash}\nView on BaseScan: https://basescan.org/tx/${tx.hash}`);
+          // Get token ID from transaction receipt
+          const tokenId = receipt.logs[0]?.topics[3] ? parseInt(receipt.logs[0].topics[3], 16) : "N/A";
+          
+          alert(`NFT minted successfully!\n\nToken ID: ${tokenId}\nTransaction: ${tx.hash}\n\nView on BaseScan: https://basescan.org/tx/${tx.hash}`);
           
         } catch (error) {
           console.error("Minting error:", error);
-          alert(`Minting failed: ${error.message || "Unknown error"}`);
+          
+          let errorMessage = "Unknown error";
+          if (error.code === 4001) {
+            errorMessage = "Transaction rejected by user";
+          } else if (error.code === -32603) {
+            errorMessage = "Transaction failed. Please check your balance and try again.";
+          } else if (error.message) {
+            errorMessage = error.message;
+          } else if (error.reason) {
+            errorMessage = error.reason;
+          }
+          
+          alert(`Minting failed: ${errorMessage}\n\nPlease check:\n- You have enough ETH for gas fees\n- You're connected to Base network\n- The contract address is correct`);
           
           // Reset button
           const mintBtn = document.querySelector(`.mint-button[data-image-key="${imageKey}"]`);
           if (mintBtn) {
             mintBtn.disabled = false;
             mintBtn.textContent = "Mint NFT";
+          }
+          
+          // Reset preview buttons
+          const previewMintBtn = document.getElementById("preview-mint-btn");
+          if (previewMintBtn && previewMintBtn.dataset.imageKey === imageKey) {
+            previewMintBtn.disabled = false;
+            previewMintBtn.textContent = "Mint NFT";
+          }
+          const mintPreviewBtn = document.getElementById("mint-preview-mint-btn");
+          if (mintPreviewBtn && mintPreviewBtn.dataset.imageKey === imageKey) {
+            mintPreviewBtn.disabled = false;
+            mintPreviewBtn.textContent = "Mint NFT";
           }
         }
       }
