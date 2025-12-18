@@ -1948,52 +1948,81 @@
       }
 
       // Wait for Farcaster SDK to be available
-      async function waitForFarcasterSDK(maxAttempts = 100) {
+      async function waitForFarcasterSDK(maxAttempts = 200) {
         for (let i = 0; i < maxAttempts; i++) {
-          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+          // Check multiple possible SDK locations
+          if ((window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) ||
+              (window.farcaster && window.farcaster.sdk && typeof window.farcaster.sdk.actions.ready === 'function')) {
+            console.log("Farcaster SDK detected at attempt", i + 1);
             return true;
           }
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
+        console.warn("Farcaster SDK not found after", maxAttempts, "attempts");
         return false;
       }
 
-      // Call ready() to hide splash screen
+      // Call ready() to hide splash screen - MUST be called in Farcaster client
       async function callFarcasterReady() {
         try {
-          // Check if we're in a Farcaster client
+          // First, wait for SDK to be available
           const sdkAvailable = await waitForFarcasterSDK();
+          
           if (sdkAvailable) {
             try {
-              await window.farcaster.sdk.actions.ready();
-              console.log("Farcaster SDK ready() called successfully");
-              return true;
+              // Try multiple ways to call ready()
+              if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+                await window.farcaster.sdk.actions.ready();
+                console.log("✅ Farcaster SDK ready() called successfully");
+                return true;
+              } else if (window.farcaster && window.farcaster.sdk && typeof window.farcaster.sdk.actions.ready === 'function') {
+                await window.farcaster.sdk.actions.ready();
+                console.log("✅ Farcaster SDK ready() called successfully (alternative path)");
+                return true;
+              } else {
+                console.warn("SDK available but ready() method not found");
+                return false;
+              }
             } catch (e) {
-              console.warn("Farcaster SDK ready() error:", e);
-              // Even if ready() fails, continue to show the app
+              console.error("❌ Farcaster SDK ready() error:", e);
+              // Even if ready() fails, log the error for debugging
               return false;
             }
           } else {
-            console.log("Farcaster SDK not available (running in regular browser)");
+            // Not in Farcaster client - this is OK for regular browsers
+            console.log("ℹ️ Farcaster SDK not available (running in regular browser)");
             return false;
           }
         } catch (e) {
-          console.warn("Error checking Farcaster SDK:", e);
+          console.error("❌ Error in callFarcasterReady():", e);
           return false;
         }
       }
 
       async function init() {
+        // IMPORTANT: Call ready() as early as possible, but after basic setup
+        // This must be called to hide the splash screen in Farcaster client
+        
+        // Start waiting for SDK immediately (don't block on other initialization)
+        const readyPromise = callFarcasterReady();
+        
+        // Do basic initialization
         initConfig();
         initAssets();
         setupEventListeners();
 
-        // Show start screen first
+        // Show start screen
         showStartScreen();
 
-        // Call ready() to hide splash screen (if in Farcaster client)
-        // This must be called to hide the loading screen
-        await callFarcasterReady();
+        // Wait for ready() to complete (with timeout to not block forever)
+        try {
+          await Promise.race([
+            readyPromise,
+            new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
+          ]);
+        } catch (e) {
+          console.warn("Ready() call had issues:", e);
+        }
 
         // Ensure start screen is still visible after ready()
         showStartScreen();
@@ -2010,6 +2039,38 @@
           });
         }
       }
+      
+      // Also try to call ready() immediately when SDK becomes available
+      // This is a fallback in case init() hasn't run yet
+      (function() {
+        let readyCalled = false;
+        async function tryCallReady() {
+          if (readyCalled) return;
+          
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            try {
+              await window.farcaster.sdk.actions.ready();
+              console.log("✅ Farcaster SDK ready() called (early call)");
+              readyCalled = true;
+            } catch (e) {
+              console.warn("Early ready() call failed:", e);
+            }
+          } else {
+            // Retry after a short delay
+            setTimeout(tryCallReady, 100);
+          }
+        }
+        
+        // Start trying immediately
+        tryCallReady();
+        
+        // Also listen for SDK load event if available
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', tryCallReady);
+        } else {
+          tryCallReady();
+        }
+      })();
 
       if (document.readyState === "complete" || document.readyState === "interactive") {
         setTimeout(init, 0);
