@@ -13,7 +13,20 @@
     <meta name="twitter:title" content="Based Matching Game" />
     <meta name="twitter:description" content="Match cards, collect images, and mint on Base." />
     <meta name="twitter:image" content="images/share.jpg" />
-    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js" defer></script>
+    <!-- Farcaster Mini App SDK - Load early and ensure it's available -->
+    <script>
+      // Try to load SDK immediately
+      (function() {
+        // Method 1: Try CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js';
+        script.async = false; // Load synchronously to ensure SDK is available
+        script.onerror = function() {
+          console.warn('Failed to load SDK from CDN, trying alternative...');
+        };
+        document.head.appendChild(script);
+      })();
+    </script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
     <style>
       :root {
@@ -1947,45 +1960,50 @@
         });
       }
 
-      // Wait for Farcaster SDK to be available
-      async function waitForFarcasterSDK(maxAttempts = 200) {
+      // Wait for Farcaster SDK to be available - check multiple locations
+      async function waitForFarcasterSDK(maxAttempts = 300) {
         for (let i = 0; i < maxAttempts; i++) {
           // Check multiple possible SDK locations
-          if ((window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) ||
-              (window.farcaster && window.farcaster.sdk && typeof window.farcaster.sdk.actions.ready === 'function')) {
-            console.log("Farcaster SDK detected at attempt", i + 1);
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions && typeof window.farcaster.sdk.actions.ready === 'function') {
+            console.log("✅ Farcaster SDK detected at attempt", i + 1);
+            return true;
+          }
+          // Also check if SDK is available via different path
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            console.log("✅ Farcaster SDK detected (without ready check) at attempt", i + 1);
             return true;
           }
           await new Promise(resolve => setTimeout(resolve, 50));
         }
-        console.warn("Farcaster SDK not found after", maxAttempts, "attempts");
+        console.warn("❌ Farcaster SDK not found after", maxAttempts, "attempts");
         return false;
       }
 
       // Call ready() to hide splash screen - MUST be called in Farcaster client
       async function callFarcasterReady() {
         try {
-          // First, wait for SDK to be available
-          const sdkAvailable = await waitForFarcasterSDK();
+          // First, wait for SDK to be available (with longer timeout)
+          const sdkAvailable = await waitForFarcasterSDK(300);
           
           if (sdkAvailable) {
             try {
-              // Try multiple ways to call ready()
+              // Try to call ready() - this is critical for hiding splash screen
               if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
-                await window.farcaster.sdk.actions.ready();
-                console.log("✅ Farcaster SDK ready() called successfully");
-                return true;
-              } else if (window.farcaster && window.farcaster.sdk && typeof window.farcaster.sdk.actions.ready === 'function') {
-                await window.farcaster.sdk.actions.ready();
-                console.log("✅ Farcaster SDK ready() called successfully (alternative path)");
-                return true;
+                if (typeof window.farcaster.sdk.actions.ready === 'function') {
+                  await window.farcaster.sdk.actions.ready();
+                  console.log("✅ Farcaster SDK ready() called successfully");
+                  return true;
+                } else {
+                  console.error("❌ ready() function not found in SDK");
+                  return false;
+                }
               } else {
-                console.warn("SDK available but ready() method not found");
+                console.error("❌ SDK structure not as expected");
                 return false;
               }
             } catch (e) {
               console.error("❌ Farcaster SDK ready() error:", e);
-              // Even if ready() fails, log the error for debugging
+              console.error("Error details:", e.message, e.stack);
               return false;
             }
           } else {
@@ -1995,9 +2013,57 @@
           }
         } catch (e) {
           console.error("❌ Error in callFarcasterReady():", e);
+          console.error("Error details:", e.message, e.stack);
           return false;
         }
       }
+      
+      // Immediate ready() call attempt - call as soon as SDK is detected
+      (function() {
+        let readyCalled = false;
+        let attempts = 0;
+        const maxAttempts = 500; // 25 seconds max
+        
+        async function tryCallReadyImmediately() {
+          attempts++;
+          
+          if (readyCalled) {
+            return;
+          }
+          
+          // Check if SDK is available
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            if (typeof window.farcaster.sdk.actions.ready === 'function') {
+              try {
+                await window.farcaster.sdk.actions.ready();
+                console.log("✅ Farcaster SDK ready() called immediately (attempt", attempts + ")");
+                readyCalled = true;
+                return;
+              } catch (e) {
+                console.warn("⚠️ Immediate ready() call failed:", e);
+                // Continue trying
+              }
+            }
+          }
+          
+          // Continue trying if not called yet and within max attempts
+          if (!readyCalled && attempts < maxAttempts) {
+            setTimeout(tryCallReadyImmediately, 50);
+          } else if (!readyCalled) {
+            console.warn("⚠️ Could not call ready() immediately after", attempts, "attempts");
+          }
+        }
+        
+        // Start trying immediately
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', tryCallReadyImmediately);
+        } else {
+          tryCallReadyImmediately();
+        }
+        
+        // Also try on window load
+        window.addEventListener('load', tryCallReadyImmediately);
+      })();
 
       async function init() {
         // IMPORTANT: Call ready() as early as possible, but after basic setup
