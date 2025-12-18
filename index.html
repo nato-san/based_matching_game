@@ -1757,7 +1757,7 @@
         });
       }
 
-      function init() {
+      async function init() {
         initConfig();
         initAssets();
         setupEventListeners();
@@ -1765,7 +1765,7 @@
         // Initialize Farcaster Mini App SDK if available
         if (window.farcaster && window.farcaster.sdk) {
           try {
-            window.farcaster.sdk.actions.ready();
+            await window.farcaster.sdk.actions.ready();
           } catch (e) {
             console.warn("Farcaster SDK initialization error:", e);
           }
