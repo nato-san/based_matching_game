@@ -13,20 +13,31 @@
     <meta name="twitter:title" content="Based Matching Game" />
     <meta name="twitter:description" content="Match cards, collect images, and mint on Base." />
     <meta name="twitter:image" content="images/share.jpg" />
-    <!-- Farcaster Mini App SDK - Load early and ensure it's available -->
-    <script>
-      // Try to load SDK immediately
-      (function() {
-        // Method 1: Try CDN
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js';
-        script.async = false; // Load synchronously to ensure SDK is available
-        script.onerror = function() {
-          console.warn('Failed to load SDK from CDN, trying alternative...');
-        };
-        document.head.appendChild(script);
+    <!-- Farcaster Mini App SDK - Use ESM import as recommended by official docs -->
+    <script type="module">
+      // Import SDK using ESM (recommended method)
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+      
+      // Make SDK available globally
+      window.farcasterSDK = sdk;
+      
+      // Call ready() as soon as SDK is loaded
+      (async function() {
+        try {
+          // Wait a bit for the app to initialize
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Call ready() immediately
+          await sdk.actions.ready();
+          console.log("✅ Farcaster SDK ready() called (ESM import)");
+        } catch (e) {
+          console.error("❌ Error calling ready() from ESM:", e);
+        }
       })();
     </script>
+    
+    <!-- Fallback: Also load via CDN for compatibility -->
+    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js" onload="console.log('SDK loaded via CDN')"></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
     <style>
       :root {
@@ -1963,44 +1974,39 @@
       // Wait for Farcaster SDK to be available - check multiple locations
       async function waitForFarcasterSDK(maxAttempts = 300) {
         for (let i = 0; i < maxAttempts; i++) {
-          // Check multiple possible SDK locations
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.ready === 'function') {
+            console.log("✅ Farcaster SDK detected (ESM) at attempt", i + 1);
+            return window.farcasterSDK;
+          }
+          // Check CDN loaded SDK
           if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions && typeof window.farcaster.sdk.actions.ready === 'function') {
-            console.log("✅ Farcaster SDK detected at attempt", i + 1);
-            return true;
+            console.log("✅ Farcaster SDK detected (CDN) at attempt", i + 1);
+            return window.farcaster.sdk;
           }
           // Also check if SDK is available via different path
           if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
-            console.log("✅ Farcaster SDK detected (without ready check) at attempt", i + 1);
-            return true;
+            console.log("✅ Farcaster SDK detected (CDN, no ready check) at attempt", i + 1);
+            return window.farcaster.sdk;
           }
           await new Promise(resolve => setTimeout(resolve, 50));
         }
         console.warn("❌ Farcaster SDK not found after", maxAttempts, "attempts");
-        return false;
+        return null;
       }
 
       // Call ready() to hide splash screen - MUST be called in Farcaster client
       async function callFarcasterReady() {
         try {
           // First, wait for SDK to be available (with longer timeout)
-          const sdkAvailable = await waitForFarcasterSDK(300);
+          const sdk = await waitForFarcasterSDK(300);
           
-          if (sdkAvailable) {
+          if (sdk && sdk.actions && typeof sdk.actions.ready === 'function') {
             try {
-              // Try to call ready() - this is critical for hiding splash screen
-              if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
-                if (typeof window.farcaster.sdk.actions.ready === 'function') {
-                  await window.farcaster.sdk.actions.ready();
-                  console.log("✅ Farcaster SDK ready() called successfully");
-                  return true;
-                } else {
-                  console.error("❌ ready() function not found in SDK");
-                  return false;
-                }
-              } else {
-                console.error("❌ SDK structure not as expected");
-                return false;
-              }
+              // Call ready() - this is critical for hiding splash screen
+              await sdk.actions.ready();
+              console.log("✅ Farcaster SDK ready() called successfully");
+              return true;
             } catch (e) {
               console.error("❌ Farcaster SDK ready() error:", e);
               console.error("Error details:", e.message, e.stack);
@@ -2031,16 +2037,28 @@
             return;
           }
           
-          // Check if SDK is available
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.ready === 'function') {
+            try {
+              await window.farcasterSDK.actions.ready();
+              console.log("✅ Farcaster SDK ready() called immediately via ESM (attempt", attempts + ")");
+              readyCalled = true;
+              return;
+            } catch (e) {
+              console.warn("⚠️ ESM ready() call failed:", e);
+            }
+          }
+          
+          // Check CDN loaded SDK
           if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
             if (typeof window.farcaster.sdk.actions.ready === 'function') {
               try {
                 await window.farcaster.sdk.actions.ready();
-                console.log("✅ Farcaster SDK ready() called immediately (attempt", attempts + ")");
+                console.log("✅ Farcaster SDK ready() called immediately via CDN (attempt", attempts + ")");
                 readyCalled = true;
                 return;
               } catch (e) {
-                console.warn("⚠️ Immediate ready() call failed:", e);
+                console.warn("⚠️ CDN ready() call failed:", e);
                 // Continue trying
               }
             }
