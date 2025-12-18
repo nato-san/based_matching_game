@@ -281,6 +281,20 @@
         opacity: 0 !important;
         pointer-events: none !important;
       }
+      .overlay.game-over ~ #start-wrapper,
+      #start-wrapper.hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      #start-wrapper[hidden],
+      #start-wrapper[style*="display: none"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
       .overlay.game-over #btn-play-again {
         grid-row: 2;
         align-self: center;
@@ -1192,28 +1206,15 @@
           startWrapper.appendChild(startBtn);
         }
         if (startWrapper) {
-          startWrapper.style.display = "flex";
-          startWrapper.style.alignItems = "center";
-          startWrapper.style.justifyContent = "center";
-          startWrapper.style.pointerEvents = "auto";
-          startWrapper.style.zIndex = "9999";
-          startWrapper.style.position = "absolute";
-          startWrapper.style.top = "0";
-          startWrapper.style.left = "0";
-          startWrapper.style.right = "0";
-          startWrapper.style.bottom = "0";
-          startWrapper.style.width = "100vw";
-          startWrapper.style.height = "100vh";
-          startWrapper.style.minWidth = "100vw";
-          startWrapper.style.minHeight = "100vh";
+          startWrapper.removeAttribute("hidden");
+          startWrapper.classList.remove("hidden");
+          startWrapper.setAttribute("style", "display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: auto !important; z-index: 9999 !important; position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; min-width: 100vw !important; min-height: 100vh !important; visibility: visible !important; opacity: 1 !important;");
+          startWrapper.hidden = false;
         }
         if (startBtn) {
+          startBtn.removeAttribute("hidden");
+          startBtn.setAttribute("style", "display: inline-block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 10000 !important;");
           startBtn.disabled = false;
-          startBtn.style.pointerEvents = "auto";
-          startBtn.style.zIndex = "10000";
-          startBtn.style.display = "inline-block";
-          startBtn.style.visibility = "visible";
-          startBtn.style.opacity = "1";
           startBtn.hidden = false;
           startBtn.onclick = startGame;
         }
@@ -1221,21 +1222,9 @@
         // Show start frame
         const startFrame = $("#start-frame");
         if (startFrame) {
-          startFrame.style.display = "block";
-          startFrame.style.position = "absolute";
-          startFrame.style.top = "0";
-          startFrame.style.left = "0";
-          startFrame.style.right = "0";
-          startFrame.style.bottom = "0";
-          startFrame.style.width = "100vw";
-          startFrame.style.height = "100vh";
-          startFrame.style.minWidth = "100vw";
-          startFrame.style.minHeight = "100vh";
-          startFrame.style.backgroundSize = "cover";
-          startFrame.style.backgroundPosition = "center";
-          startFrame.style.backgroundRepeat = "no-repeat";
-          startFrame.style.pointerEvents = "none";
-          startFrame.style.zIndex = "0";
+          startFrame.removeAttribute("hidden");
+          startFrame.setAttribute("style", "display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; min-width: 100vw !important; min-height: 100vh !important; background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important; pointer-events: none !important; z-index: 0 !important; visibility: visible !important; opacity: 1 !important;");
+          startFrame.hidden = false;
         }
 
         // Hide game over message
@@ -1479,13 +1468,30 @@
         overlay.hidden = true;
         overlay.style.display = "none";
         overlay.style.pointerEvents = "none";
+        
+        // Hide start frame
         const startFrame = $("#start-frame");
-        if (startFrame) startFrame.style.display = "none";
+        if (startFrame) {
+          startFrame.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important;");
+          startFrame.hidden = true;
+        }
+        
+        // Hide start wrapper and button
         const startWrapper = $("#start-wrapper");
         if (startWrapper) {
-          startWrapper.style.display = "none";
-          startWrapper.style.pointerEvents = "none";
+          startWrapper.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startWrapper.setAttribute("hidden", "true");
+          startWrapper.hidden = true;
+          startWrapper.classList.add("hidden");
         }
+        
+        const startBtn = $("#btn-start");
+        if (startBtn) {
+          startBtn.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startBtn.setAttribute("hidden", "true");
+          startBtn.hidden = true;
+        }
+        
         updateGridColumns();
         matches = 0;
         firstPick = null;
@@ -1514,11 +1520,24 @@
         // Hide start button completely
         const startBtn = $("#btn-start");
         if (startBtn) {
-          startBtn.style.display = "none";
-          startBtn.style.visibility = "hidden";
-          startBtn.style.opacity = "0";
-          startBtn.style.pointerEvents = "none";
+          startBtn.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startBtn.setAttribute("hidden", "true");
           startBtn.hidden = true;
+        }
+        
+        // Hide start wrapper and frame
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper) {
+          startWrapper.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startWrapper.setAttribute("hidden", "true");
+          startWrapper.hidden = true;
+          startWrapper.classList.add("hidden");
+        }
+        const startFrame = $("#start-frame");
+        if (startFrame) {
+          startFrame.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important;");
+          startFrame.setAttribute("hidden", "true");
+          startFrame.hidden = true;
         }
         
         // Show play again button
@@ -1541,12 +1560,6 @@
         const gameOverMessage = $("#game-over-message");
         gameOverMessage.textContent = "GAME OVER";
         gameOverMessage.style.display = "block";
-        
-        // Hide start wrapper and image so it doesn't appear on game over
-        const startWrapper = $("#start-wrapper");
-        if (startWrapper) startWrapper.style.display = "none";
-        const startFrame = $("#start-frame");
-        if (startFrame) startFrame.style.display = "none";
 
         overlay.hidden = false;
         overlay.style.display = "grid";
@@ -1759,21 +1772,36 @@
         });
       }
 
+      // Wait for Farcaster SDK to be available
+      async function waitForFarcasterSDK(maxAttempts = 50) {
+        for (let i = 0; i < maxAttempts; i++) {
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            return true;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return false;
+      }
+
       async function init() {
         initConfig();
         initAssets();
         setupEventListeners();
 
-        // Show start screen first (before ready() to ensure it's visible)
+        // Show start screen first
         showStartScreen();
 
-        // Initialize Farcaster Mini App SDK if available
-        if (window.farcaster && window.farcaster.sdk) {
+        // Wait for Farcaster SDK to be available and call ready()
+        const sdkAvailable = await waitForFarcasterSDK();
+        if (sdkAvailable) {
           try {
             await window.farcaster.sdk.actions.ready();
+            console.log("Farcaster SDK ready() called successfully");
           } catch (e) {
             console.warn("Farcaster SDK initialization error:", e);
           }
+        } else {
+          console.warn("Farcaster SDK not available after waiting");
         }
 
         // Ensure start screen is still visible after ready()
