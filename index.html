@@ -221,17 +221,15 @@
       }
       .start-wrapper {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         display: flex !important;
         align-items: center;
         justify-content: center;
-        width: 100vw;
-        height: 100vh;
-        min-width: 100vw;
-        min-height: 100vh;
+        width: min(100vw, 420px);
+        height: min(100vh, 720px);
+        aspect-ratio: 2 / 3;
         z-index: 9999;
         overflow: visible;
         pointer-events: auto;
@@ -243,12 +241,8 @@
         position: absolute;
         top: 0;
         left: 0;
-        right: 0;
-        bottom: 0;
-        width: 100vw;
-        height: 100vh;
-        min-width: 100vw;
-        min-height: 100vh;
+        width: 100%;
+        height: 100%;
         background-image: url("images/base_top.JPG");
         background-size: cover;
         background-position: center;
@@ -259,8 +253,8 @@
       .start-wrapper #btn-start {
         position: absolute;
         left: 50% !important;
-        bottom: 5% !important;
-        transform: translateX(-50%) !important;
+        top: calc(50% + 7%) !important;
+        transform: translate(-50%, -50%) !important;
         z-index: 10000 !important;
         margin: 0 !important;
         pointer-events: auto !important;
@@ -1208,12 +1202,12 @@
         if (startWrapper) {
           startWrapper.removeAttribute("hidden");
           startWrapper.classList.remove("hidden");
-          startWrapper.setAttribute("style", "display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: auto !important; z-index: 9999 !important; position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; min-width: 100vw !important; min-height: 100vh !important; visibility: visible !important; opacity: 1 !important;");
+          startWrapper.setAttribute("style", "display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: auto !important; z-index: 9999 !important; position: absolute !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; width: min(100vw, 420px) !important; height: min(100vh, 720px) !important; aspect-ratio: 2 / 3 !important; visibility: visible !important; opacity: 1 !important;");
           startWrapper.hidden = false;
         }
         if (startBtn) {
           startBtn.removeAttribute("hidden");
-          startBtn.setAttribute("style", "display: inline-block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 10000 !important;");
+          startBtn.setAttribute("style", "display: inline-block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 10000 !important; position: absolute !important; left: 50% !important; top: calc(50% + 7%) !important; transform: translate(-50%, -50%) !important;");
           startBtn.disabled = false;
           startBtn.hidden = false;
           startBtn.onclick = startGame;
@@ -1223,7 +1217,7 @@
         const startFrame = $("#start-frame");
         if (startFrame) {
           startFrame.removeAttribute("hidden");
-          startFrame.setAttribute("style", "display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; min-width: 100vw !important; min-height: 100vh !important; background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important; pointer-events: none !important; z-index: 0 !important; visibility: visible !important; opacity: 1 !important;");
+          startFrame.setAttribute("style", "display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important; pointer-events: none !important; z-index: 0 !important; visibility: visible !important; opacity: 1 !important;");
           startFrame.hidden = false;
         }
 
