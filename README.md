@@ -3,3 +3,4 @@ Nato-san Games - Readme Draft
 
 - nato-san: Game design, implementation
 - Friend: Testing, README editing, feedback
+Contemplate ENG / JP readme
