@@ -1376,8 +1376,50 @@
       // Connect wallet
       let connectedWalletType = null; // 'metamask' or 'farcaster'
       let farcasterWallet = null;
+
+      async function getFarcasterEthereumProvider() {
+        const sdk =
+          (window.farcasterSDK && window.farcasterSDK.wallet)
+            ? window.farcasterSDK
+            : (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.wallet)
+              ? window.farcaster.sdk
+              : null;
+
+        if (!sdk || !sdk.wallet) {
+          return null;
+        }
+
+        if (typeof sdk.wallet.getEthereumProvider === "function") {
+          return await sdk.wallet.getEthereumProvider();
+        }
+
+        if (sdk.wallet.ethProvider) {
+          return sdk.wallet.ethProvider;
+        }
+
+        return null;
+      }
       
       async function connectWallet() {
+        const farcasterProvider = await getFarcasterEthereumProvider();
+
+        if (farcasterProvider && typeof farcasterProvider.request === "function") {
+          try {
+            const accounts = await farcasterProvider.request({
+              method: "eth_requestAccounts"
+            });
+
+            await switchToBaseChain(farcasterProvider);
+
+            connectedWalletType = 'farcaster';
+            farcasterWallet = farcasterProvider;
+            return accounts[0];
+          } catch (error) {
+            console.error("Farcaster wallet connection error:", error);
+            throw error;
+          }
+        }
+
         if (typeof window.ethereum !== "undefined") {
           try {
             // Request account access
@@ -1394,36 +1436,30 @@
             console.error("Wallet connection error:", error);
             throw error;
           }
-        } else {
-          // Try Farcaster SDK wallet connection
-          if (window.farcaster && window.farcaster.sdk) {
-            try {
-              // Request wallet through Farcaster SDK
-              const wallet = await window.farcaster.sdk.actions.requestWallet();
-              connectedWalletType = 'farcaster';
-              farcasterWallet = wallet;
-              return wallet.address;
-            } catch (e) {
-              console.error("Farcaster wallet error:", e);
-              throw new Error("Failed to connect Farcaster wallet. Please try again.");
-            }
-          }
-          throw new Error("Please install MetaMask or use Farcaster client");
         }
+
+        throw new Error("Farcaster wallet provider was not found. Please open this Mini App inside Farcaster and try again.");
       }
 
       // Switch to Base chain
-      async function switchToBaseChain() {
-        if (typeof window.ethereum !== "undefined") {
+      async function switchToBaseChain(ethereumProvider = window.ethereum) {
+        if (ethereumProvider && typeof ethereumProvider.request === "function") {
           try {
-            await window.ethereum.request({
+            const currentChainId = await ethereumProvider.request({
+              method: "eth_chainId"
+            });
+            if (parseInt(currentChainId, 16) === BASE_CHAIN_ID) {
+              return;
+            }
+
+            await ethereumProvider.request({
               method: "wallet_switchEthereumChain",
               params: [{ chainId: `0x${BASE_CHAIN_ID.toString(16)}` }]
             });
           } catch (switchError) {
             // If chain doesn't exist, add it
             if (switchError.code === 4902) {
-              await window.ethereum.request({
+              await ethereumProvider.request({
                 method: "wallet_addEthereumChain",
                 params: [{
                   chainId: `0x${BASE_CHAIN_ID.toString(16)}`,
@@ -1590,25 +1626,14 @@
           
           if (connectedWalletType === 'farcaster' && farcasterWallet) {
             // Farcaster SDK wallet - use the wallet's provider if available
-            if (farcasterWallet.provider) {
-              provider = new ethers.providers.Web3Provider(farcasterWallet.provider);
-              signer = provider.getSigner();
-            } else if (window.ethereum) {
-              // Fallback to window.ethereum if available
-              provider = new ethers.providers.Web3Provider(window.ethereum);
-              signer = provider.getSigner();
-            } else {
-              // Farcaster SDK wallet but no provider available
-              // Try to use Farcaster SDK's transaction signing
-              alert("Farcaster wallet is connected, but transaction signing is not fully supported yet.\n\nPlease use MetaMask for NFT minting, or check if your Farcaster client supports wallet transactions.");
-              throw new Error("Farcaster wallet provider not available");
-            }
+            provider = new ethers.providers.Web3Provider(farcasterWallet, "any");
+            signer = provider.getSigner();
           } else if (typeof window.ethereum !== "undefined") {
             // MetaMask or other Web3 wallet
-            provider = new ethers.providers.Web3Provider(window.ethereum);
+            provider = new ethers.providers.Web3Provider(window.ethereum, "any");
             signer = provider.getSigner();
           } else {
-            alert("No wallet provider found. Please install MetaMask or use a Farcaster client with wallet support.");
+            alert("No wallet provider found. Please open this Mini App inside Farcaster and try again.");
             throw new Error("No wallet provider available");
           }
           
