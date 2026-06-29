@@ -1653,16 +1653,20 @@
             }
           }
           
-          // Create contract instance
-          const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
-          
-          // Check if contract is deployed
+          // Check if contract is deployed using a public Base RPC.
+          // Some in-app wallet providers do not reliably support read-only eth_call.
           try {
-            await contract.totalSupply();
+            const readProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
+            const readContract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, readProvider);
+            await readContract.totalSupply();
           } catch (error) {
+            console.error("Contract read check failed:", error);
             alert("Contract not found at the specified address. Please verify the contract address.");
             throw new Error("Contract not found");
           }
+
+          // Create contract instance for the user's wallet transaction.
+          const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
 
           // Upload image to IPFS (or use image URL)
           const tokenURI = await uploadToIPFS(symbol.image, imageKey);
