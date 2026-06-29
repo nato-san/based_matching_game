@@ -1,0 +1,19 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjU5Nzk0MSwidHlwZSI6ImF1dGgiLCJrZXkiOiIweGJjMUVCRDI2M0FBNGFDMUZERjgzNDYzMjEzNWQ3NGNFYTE0OWVDRjYifQ",
+    "payload": "eyJkb21haW4iOiJiYXNlZC1tYXRjaGluZy1nYW1lLTMyeHMudmVyY2VsLmFwcCJ9",
+    "signature": "nrTA1f1K1gRwnY77+i+zCiVvpPz9TbEWpWz0vK2doAMLFq5Cm+nUBNu65PJ8OQ3lnc48IavolFXOYwioHibvlBs="
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Based Matching Game",
+    "description": "Collect images and mint NFTs on Base chain!",
+    "iconUrl": "",
+    "homeUrl": "https://based-matching-game-oaia.vercel.app",
+    "splashImageUrl": "https://based-matching-game-oaia.vercel.app/images/base_top.JPG",
+    "splashBackgroundColor": "#0000ff",
+    "requiredChains": ["eip155:8453"],
+    "requiredCapabilities": ["actions.ready"],
+    "tags": ["game", "nft", "base"]
+  }
+}

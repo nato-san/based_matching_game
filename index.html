@@ -1,0 +1,2232 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Based Matching Game</title>
+    <!-- Share image (Open Graph / Twitter Card) -->
+    <meta property="og:title" content="Based Matching Game" />
+    <meta property="og:description" content="Match cards, collect images, and mint on Base." />
+    <meta property="og:image" content="images/share.jpg" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Based Matching Game" />
+    <meta name="twitter:description" content="Match cards, collect images, and mint on Base." />
+    <meta name="twitter:image" content="images/share.jpg" />
+    <!-- Farcaster Mini App SDK - Use ESM import as recommended by official docs -->
+    <script type="module">
+      // Import SDK using ESM (recommended method)
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+      
+      // Make SDK available globally
+      window.farcasterSDK = sdk;
+      
+      // Call ready() as soon as SDK is loaded
+      (async function() {
+        try {
+          // Wait a bit for the app to initialize
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Call ready() immediately
+          await sdk.actions.ready();
+          console.log("✅ Farcaster SDK ready() called (ESM import)");
+        } catch (e) {
+          console.error("❌ Error calling ready() from ESM:", e);
+        }
+      })();
+    </script>
+    
+    <!-- Fallback: Also load via CDN for compatibility -->
+    <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk/dist/index.min.js" onload="console.log('SDK loaded via CDN')"></script>
+    <!-- Ethers.js - Use reliable CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+      // Verify ethers.js is loaded
+      (function() {
+        let attempts = 0;
+        const maxAttempts = 100;
+        function checkEthers() {
+          attempts++;
+          if (typeof ethers !== "undefined") {
+            console.log("✅ Ethers.js loaded successfully");
+            return;
+          }
+          if (attempts < maxAttempts) {
+            setTimeout(checkEthers, 100);
+          } else {
+            console.error("❌ Ethers.js failed to load after", maxAttempts, "attempts");
+          }
+        }
+        // Start checking after a short delay
+        setTimeout(checkEthers, 100);
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 100vh;
+        overflow: hidden;
+        background: #0a1022; /* unified blue background */
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          "ヒラギノ角ゴ ProN",
+          "Noto Sans JP",
+          sans-serif;
+      }
+      .game-root {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 100vh;
+      }
+      /* Mobile-first portrait board container (2:3 aspect via inner grid) */
+      .board-wrap {
+        width: min(100vw, 420px);
+        height: min(100vh, 720px);
+        aspect-ratio: 2 / 3;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        box-sizing: border-box;
+        background: #0a1022; /* blue */
+      }
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #fff;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #173257, #12264a);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+      }
+      .top-left {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        font-weight: 600;
+      }
+      .score,
+      .timer,
+      .moves {
+        font-size: 14px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+      button.ui {
+        appearance: none;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 14px;
+        font-weight: 700;
+        color: #071021;
+        background: var(--accent, #4da3ff);
+        box-shadow: 0 4px 0 #2b6fb8;
+        cursor: pointer;
+        transition: transform 0.05s ease;
+      }
+      button.ui:active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #2b6fb8;
+      }
+      button.secondary {
+        background: #77c2ff;
+        box-shadow: 0 4px 0 #4c97d6;
+      }
+      button.ghost {
+        background: #173257;
+        color: #dbe6ff;
+        box-shadow: none;
+      }
+
+      .grid {
+        flex: 1 1 auto;
+        display: grid;
+        gap: 10px;
+        /* Default 4x4 on phones; can grow by config */
+        grid-template-columns: repeat(4, 1fr);
+        grid-auto-rows: 1fr;
+      }
+
+      .card {
+        position: relative;
+        width: 100%;
+        background: transparent;
+        perspective: 800px;
+        user-select: none;
+      }
+      .card-inner {
+        position: relative;
+        width: 100%;
+        padding-top: 140%; /* portrait-friendly ratio */
+        transform-style: preserve-3d;
+        transition: transform 300ms ease;
+      }
+      .card.flipped .card-inner {
+        transform: rotateY(180deg);
+      }
+      .card-face {
+        position: absolute;
+        inset: 0;
+        border-radius: 12px;
+        backface-visibility: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        border: none !important;
+        outline: none !important;
+        background-color: transparent;
+      }
+      .card-front {
+        /* Use custom card back design image instead of '?' */
+        border: none !important;
+        outline: none !important;
+        overflow: hidden;
+        background-image: url("images/base_00.jpg");
+        background-size: 100% 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: transparent;
+      }
+      .card-back {
+        transform: rotateY(180deg);
+        background: #0c1830;
+        border: none !important;
+        outline: none !important;
+        overflow: hidden;
+        background-color: #0c1830;
+      }
+      .card {
+        border: none !important;
+        outline: none !important;
+      }
+      .card-back img {
+        border: none !important;
+        outline: none !important;
+      }
+      .symbol {
+        width: 78%;
+        height: 78%;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: #0f2747;
+        color: #fff;
+        font-weight: 900;
+        font-size: clamp(16px, 6vw, 24px);
+        text-align: center;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      .matched .card-front {
+        filter: saturate(0.2) brightness(0.7);
+      }
+      .matched .card-back {
+        filter: saturate(0.2) brightness(0.7);
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 10;
+        pointer-events: auto; /* allow clicks on children */
+      }
+      .overlay.game-over {
+        grid-template-rows: auto auto auto;
+        align-items: center;
+        justify-items: center;
+        gap: 15px;
+      }
+      .overlay.start-screen {
+        background: #0000ff;
+        grid-template-rows: auto;
+        place-items: center;
+        gap: 12px;
+        padding: 0;
+      }
+      .start-wrapper {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: min(100vw, 420px);
+        height: min(100vh, 720px);
+        aspect-ratio: 2 / 3;
+        z-index: 9999;
+        overflow: visible;
+        pointer-events: auto;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      .start-frame {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url("images/base_top.JPG");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        z-index: 0;
+        pointer-events: none;
+      }
+      .start-wrapper #btn-start {
+        position: absolute;
+        left: 50% !important;
+        top: calc(50% + 7%) !important;
+        transform: translate(-50%, -50%) !important;
+        z-index: 10000 !important;
+        margin: 0 !important;
+        pointer-events: auto !important;
+        display: inline-block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        min-width: 180px !important;
+        min-height: 48px !important;
+        padding: 12px 24px !important;
+      }
+      .overlay.game-over #game-over-message {
+        grid-row: 1;
+        align-self: center;
+      }
+      .overlay.game-over #btn-start {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .overlay.game-over ~ #start-wrapper,
+      #start-wrapper.hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      #start-wrapper[hidden],
+      #start-wrapper[style*="display: none"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .overlay.game-over #btn-play-again {
+        grid-row: 2;
+        align-self: center;
+      }
+      .overlay.game-over #btn-share-farcaster {
+        grid-row: 3;
+        align-self: center;
+      }
+      .panel {
+        width: min(88vw, 360px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 18px;
+        text-align: center;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      }
+      .panel h1 {
+        margin: 6px 0 12px;
+        font-size: 22px;
+      }
+      .panel p {
+        margin: 6px 0;
+        opacity: 0.9;
+      }
+      .panel .row {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 14px;
+        flex-wrap: wrap;
+      }
+
+      /* Responsive columns by config later; safe defaults */
+      @media (min-width: 480px) {
+        .board-wrap {
+          width: 420px;
+          height: 630px;
+        }
+      }
+
+      /* Gallery related styles */
+      .gallery-button {
+        margin-left: 8px;
+      }
+      .gallery-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 20000;
+        pointer-events: auto;
+      }
+      .gallery-overlay.active {
+        display: grid;
+        pointer-events: auto;
+      }
+      .gallery-panel {
+        width: min(90vw, 500px);
+        max-height: 80vh;
+        overflow-y: auto;
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      }
+      .gallery-panel h2 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        text-align: center;
+      }
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .gallery-item {
+        aspect-ratio: 1;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #0c1830;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+      }
+      .gallery-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .gallery-item.locked {
+        filter: grayscale(100%) brightness(0.3);
+      }
+      .gallery-item.locked::after {
+        content: "🔒";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 32px;
+      }
+      .gallery-item.minted::after {
+        content: "✓ Minted";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 255, 0, 0.8);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px;
+        text-align: center;
+      }
+      /* Preview modal */
+      .preview-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 21000;
+        padding: 16px;
+        pointer-events: auto;
+      }
+      .preview-overlay.active {
+        display: grid;
+        pointer-events: auto;
+      }
+      #preview-label {
+        display: none; /* Hide file name text */
+      }
+      .preview-panel {
+        width: min(90vw, 520px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+      }
+      .preview-panel img {
+        width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 12px;
+        background: #0c1830;
+      }
+      .preview-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      /* Mint preview modal (on game clear) */
+      .mint-preview-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 21000;
+        padding: 16px;
+        pointer-events: auto;
+      }
+      .mint-preview-overlay.active {
+        display: grid;
+        pointer-events: auto;
+      }
+      .mint-preview-panel {
+        width: min(90vw, 520px);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+      }
+      .mint-preview-panel img {
+        width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 12px;
+        background: #0c1830;
+      }
+      .mint-preview-title {
+        font-size: 22px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .mint-button {
+        margin-top: 10px;
+        width: 100%;
+      }
+      .mint-notification {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, #173257, #0f2747);
+        color: #fff;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        z-index: 30;
+        display: none;
+        align-items: center;
+        gap: 12px;
+      }
+      .mint-notification.active {
+        display: flex;
+      }
+      .mint-notification img {
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+    </style>
+
+      <style id="assistant-card-size-fit">
+      /* Ensure cards scale to fit the grid rows on higher levels */
+      .grid { grid-auto-rows: unset !important; }
+      .card { height: 100% !important; }
+      .card-inner {
+        padding-top: 0 !important; /* disable aspect via padding */
+        height: 100% !important;   /* fill the grid cell */
+      }
+      .card-face { height: 100% !important; }
+    </style>
+    <style id="theme-override">
+      /* Blue theme override (#0000ff) */
+      html,
+      body {
+        background: #0000ff !important;
+      }
+      .board-wrap {
+        background: #0000ff !important;
+      }
+      .top-bar {
+        background: #0000ff !important;
+        color: #ffffff !important;
+      }
+      .top-bar * {
+        color: #ffffff !important;
+      }
+      button,
+      .btn,
+      .ui-button {
+        background: #0000ff !important;
+        color: #ffffff !important;
+        border-color: rgba(255, 255, 255, 0.35) !important;
+      }
+      .card-back {
+        background: #0000ff !important;
+      }
+    </style>
+</head>
+  <body>
+    <div class="game-root">
+      <div class="board-wrap">
+        <div class="top-bar">
+          <div class="top-left">
+            <div class="timer">Time: <span id="time">0.0</span>s</div>
+          </div>
+          <div class="controls">
+            <button type="button" id="btn-gallery" class="ui ghost gallery-button" aria-label="Gallery">Gallery</button>
+            <button type="button" id="btn-restart" class="ui secondary" aria-label="Restart">Reset</button>
+            <button type="button" id="btn-top" class="ui secondary" aria-label="Back to TOP">TOP</button>
+          </div>
+        </div>
+        <div id="grid" class="grid" role="grid" aria-label="Memory card grid"></div>
+      </div>
+
+      <div id="start-wrapper" class="start-wrapper">
+        <div id="start-frame" class="start-frame"></div>
+        <button type="button" id="btn-start" class="ui" aria-label="START">
+          START
+        </button>
+      </div>
+
+      <div id="overlay" class="overlay" hidden>
+        <div id="game-over-message" style="display: none; color: #fff; font-size: 36px; font-weight: 700; text-align: center; width: 100%; grid-row: 1; align-self: center;"></div>
+        <button
+          type="button"
+          id="btn-play-again"
+          class="ui secondary"
+          aria-label="Play Again"
+          hidden
+          style="min-width: 180px; min-height: 48px"
+        >
+          Play Again
+        </button>
+        <button
+          type="button"
+          id="btn-share-farcaster"
+          class="ui secondary"
+          aria-label="Share on Farcaster"
+          hidden
+          style="min-width: 180px; min-height: 48px; margin-top: 10px;"
+        >
+          Share on Farcaster
+        </button>
+      </div>
+
+      <!-- Gallery overlay -->
+      <div id="gallery-overlay" class="gallery-overlay">
+        <div class="gallery-panel">
+          <h2>Collection</h2>
+          <div id="gallery-grid" class="gallery-grid">
+            <!-- Gallery items will be displayed here -->
+          </div>
+          <div class="row" style="margin-top: 20px;">
+            <button type="button" id="btn-close-gallery" class="ui">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview modal for gallery images -->
+      <div id="preview-overlay" class="preview-overlay" aria-hidden="true">
+        <div class="preview-panel">
+          <img id="preview-image" src="" alt="Preview" />
+          <div id="preview-label"></div>
+          <div class="preview-actions">
+            <button type="button" id="preview-mint-btn" class="ui secondary">Mint NFT</button>
+            <button type="button" id="preview-close-btn" class="ui ghost">Close</button>
+          </div>
+        </div>
+
+      <!-- Mint preview modal shown right after game clear -->
+      <div id="mint-preview-overlay" class="mint-preview-overlay" aria-hidden="true">
+        <div class="mint-preview-panel">
+          <div class="mint-preview-title">Congratulations!</div>
+          <img id="mint-preview-image" src="" alt="Mint preview" />
+          <div id="mint-preview-label"></div>
+          <div class="preview-actions">
+            <button type="button" id="mint-preview-mint-btn" class="ui secondary">Mint NFT</button>
+            <button type="button" id="mint-preview-close-btn" class="ui ghost">Close</button>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <!-- ミント通知 -->
+      <div id="mint-notification" class="mint-notification">
+        <img id="mint-notification-img" src="" alt="Acquired image">
+        <div>
+          <div style="font-weight: 700; font-size: 16px;">New image acquired!</div>
+          <div id="mint-notification-name" style="font-size: 14px; opacity: 0.9;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config (editable) -->
+    <script id="game-config" type="application/json">
+      {
+        "colors": {
+          "background": "#0a1022",
+          "cardFront": "#143a66",
+          "cardBack": "#0c1830",
+          "accent": "#4da3ff"
+        },
+        "gameplay": {
+          "cols": 4,
+          "rows": 6,
+          "flipDelayMs": 700,
+          "timeLimitSec": 100
+        },
+        "ui": {
+          "showTimer": true
+        },
+        "_meta": {
+          "colors.background": { "type": "color", "label": "Background Color" },
+          "colors.cardFront": { "type": "color", "label": "Card Front" },
+          "colors.cardBack": { "type": "color", "label": "Card Back" },
+          "colors.accent": { "type": "color", "label": "Accent" },
+
+          "gameplay.cols": { "type": "number", "label": "Columns", "min": 2, "max": 6, "step": 1 },
+          "gameplay.rows": { "type": "number", "label": "Rows", "min": 2, "max": 8, "step": 1 },
+          "gameplay.flipDelayMs": {
+            "type": "number",
+            "label": "Mismatch Flip Delay (ms)",
+            "min": 200,
+            "max": 2000,
+            "step": 50
+          },
+
+          "gameplay.timeLimitSec": { "type": "number", "label": "Time Limit (seconds)", "min": 10, "max": 600, "step": 5 },
+
+          "ui.showTimer": { "type": "boolean", "label": "Show Timer" }
+        }
+      }
+    </script>
+
+    <!-- Assets: 15 labeled symbols Base_1..Base_15 (text by default, can be swapped to images) -->
+    <script id="game-assets" type="application/json">
+      {
+        "symbols": {
+          "Base_1": {
+            "label": "Base_1",
+            "image": "images/base01.JPG"
+          },
+          "Base_2": {
+            "label": "Base_2",
+            "image": "images/base02.jpg"
+          },
+          "Base_3": {
+            "label": "Base_3",
+            "image": "images/base03.jpg"
+          },
+          "Base_4": {
+            "label": "Base_4",
+            "image": "images/base04.jpg"
+          },
+          "Base_5": {
+            "label": "Base_5",
+            "image": "images/base05.jpg"
+          },
+          "Base_6": {
+            "label": "Base_6",
+            "image": "images/base06.jpg"
+          },
+          "Base_7": {
+            "label": "Base_7",
+            "image": "images/base07.jpg"
+          },
+          "Base_8": {
+            "label": "Base_8",
+            "image": "images/base08.jpg"
+          },
+          "Base_9": {
+            "label": "Base_9",
+            "image": "images/base09.JPG"
+          },
+          "Base_10": {
+            "label": "Base_10",
+            "image": "images/base10.jpg"
+          },
+          "Base_11": {
+            "label": "Base_11",
+            "image": "images/base11.jpg"
+          },
+          "Base_12": {
+            "label": "Base_12",
+            "image": "images/base12.jpg"
+          },
+          "Base_13": {
+            "label": "Base_13",
+            "image": "images/base13.jpg"
+          },
+          "Base_14": {
+            "label": "Base_14",
+            "image": "images/base14.jpg"
+          },
+          "Base_15": {
+            "label": "Base_15",
+            "image": "images/base15.jpg"
+          }
+        },
+        "sounds": {
+          "match": "images/match.mp3",
+          "flip": "images/flip.mp3",
+          "fail": ""
+        },
+        "_meta": {
+          "symbols.Base_1.image": { "label": "Base_1 画像", "category": "画像" },
+          "symbols.Base_2.image": { "label": "Base_2 画像", "category": "画像" },
+          "symbols.Base_3.image": { "label": "Base_3 画像", "category": "画像" },
+          "symbols.Base_4.image": { "label": "Base_4 画像", "category": "画像" },
+          "symbols.Base_5.image": { "label": "Base_5 画像", "category": "画像" },
+          "symbols.Base_6.image": { "label": "Base_6 画像", "category": "画像" },
+          "symbols.Base_7.image": { "label": "Base_7 画像", "category": "画像" },
+          "symbols.Base_8.image": { "label": "Base_8 画像", "category": "画像" },
+          "symbols.Base_9.image": { "label": "Base_9 画像", "category": "画像" },
+          "symbols.Base_10.image": { "label": "Base_10 画像", "category": "画像" },
+          "symbols.Base_11.image": { "label": "Base_11 画像", "category": "画像" },
+          "symbols.Base_12.image": { "label": "Base_12 画像", "category": "画像" },
+          "symbols.Base_13.image": { "label": "Base_13 画像", "category": "画像" },
+          "symbols.Base_14.image": { "label": "Base_14 画像", "category": "画像" },
+          "symbols.Base_15.image": { "label": "Base_15 画像", "category": "画像" },
+
+          "sounds.match": { "label": "一致サウンド", "category": "効果音" },
+          "sounds.flip": { "label": "反転サウンド", "category": "効果音" },
+          "sounds.fail": { "label": "失敗サウンド", "category": "効果音" }
+        }
+      }
+    </script>
+
+    <script>
+      // Game globals
+      let isMuted = false;
+      let gameStarted = false;
+
+      // Config & Assets
+      let CONFIG = {};
+      let ASSETS = {};
+      const loadedSounds = {};
+
+      // Collection management (saved to localStorage)
+      const COLLECTION_KEY = "based_matching_collection";
+      const MINTED_KEY = "based_matching_minted";
+      
+      // Base chain configuration
+      const BASE_CHAIN_ID = 8453; // Base mainnet
+      const BASE_RPC_URL = "https://mainnet.base.org"; // Base mainnet
+      // NFT Contract address - UPDATE THIS with your deployed contract address
+      // Deploy contract using: cd contracts && npm install && npm run deploy:base
+      const NFT_CONTRACT_ADDRESS = "0x7644eA7D03eDE38e32031734BC340eb0a4D2858c"; // Base mainnet
+      
+      // ERC-721 ABI (for BaseMatchingNFT contract)
+      const NFT_ABI = [
+        "function mint(address to, string memory tokenURI) public returns (uint256)",
+        "function tokenURI(uint256 tokenId) public view returns (string memory)",
+        "function totalSupply() public view returns (uint256)",
+        "function ownerOf(uint256 tokenId) public view returns (address)",
+        "function balanceOf(address owner) public view returns (uint256)"
+      ];
+      
+      // IPFS Configuration (optional - for production)
+      // To use Pinata: https://www.pinata.cloud/
+      const PINATA_API_KEY = ""; // Optional: Your Pinata API Key
+      const PINATA_SECRET_KEY = ""; // Optional: Your Pinata Secret Key
+      const USE_IPFS = false; // Set to true to upload images to IPFS
+      
+      function getCollection() {
+        try {
+          const stored = localStorage.getItem(COLLECTION_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function saveCollection(collection) {
+        try {
+          localStorage.setItem(COLLECTION_KEY, JSON.stringify(collection));
+        } catch (e) {
+          console.warn("Failed to save collection:", e);
+        }
+      }
+
+      function addToCollection(imageKey) {
+        const collection = getCollection();
+        if (!collection.includes(imageKey)) {
+          collection.push(imageKey);
+          saveCollection(collection);
+          return true; // New addition
+        }
+        return false; // Already owned
+      }
+
+      function getMintedImages() {
+        try {
+          const stored = localStorage.getItem(MINTED_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function saveMintedImage(imageKey) {
+        try {
+          const minted = getMintedImages();
+          if (!minted.includes(imageKey)) {
+            minted.push(imageKey);
+            localStorage.setItem(MINTED_KEY, JSON.stringify(minted));
+          }
+        } catch (e) {
+          console.warn("Failed to save minted image:", e);
+        }
+      }
+
+      function initConfig() {
+        CONFIG = JSON.parse(document.getElementById("game-config").textContent);
+        // reactive style
+        document.body.style.background = CONFIG.colors.background;
+        document.documentElement.style.setProperty("--accent", CONFIG.colors.accent);
+        // Always fixed to stage 3 (4 columns × 6 rows)
+        updateGridColumns();
+      }
+
+      function initAssets() {
+        ASSETS = JSON.parse(document.getElementById("game-assets").textContent);
+        // Sounds
+        if (ASSETS.sounds.match) loadedSounds.match = new Audio(ASSETS.sounds.match);
+        if (ASSETS.sounds.flip) loadedSounds.flip = new Audio(ASSETS.sounds.flip);
+        if (ASSETS.sounds.fail) loadedSounds.fail = new Audio(ASSETS.sounds.fail);
+      }
+
+      // Game state
+      let deck = []; // array of {id, key}
+      let firstPick = null;
+      let lock = false;
+      let matches = 0;
+      let timerId = null;
+      let remainSeconds = 0;
+
+      function updateGridColumns() {
+        const grid = document.getElementById("grid");
+        if (!grid) return;
+        // 常にステージ3（4列×6行）で固定
+        grid.style.gridTemplateColumns = `repeat(4, 1fr)`;
+        grid.style.gridTemplateRows = `repeat(6, 1fr)`;
+        grid.style.gap = "6px";
+      }
+
+      // Function to mint a random image
+      function mintRandomImage() {
+        const allImages = Object.keys(ASSETS.symbols); // Base_1 to Base_15
+        const availableImages = allImages.filter(key => {
+          // Only images not in collection
+          const collection = getCollection();
+          return !collection.includes(key);
+        });
+
+        if (availableImages.length === 0) {
+          // All images acquired
+          return null;
+        }
+
+        // Select one randomly
+        const randomIndex = Math.floor(Math.random() * availableImages.length);
+        const selectedKey = availableImages[randomIndex];
+        
+        // Add to collection
+        const isNew = addToCollection(selectedKey);
+        if (isNew) {
+          return selectedKey;
+        }
+        return null;
+      }
+
+      // Show mint notification
+      function showMintNotification(imageKey) {
+        const notification = document.getElementById("mint-notification");
+        const img = document.getElementById("mint-notification-img");
+        const name = document.getElementById("mint-notification-name");
+        
+        const symbol = ASSETS.symbols[imageKey];
+        if (symbol && symbol.image) {
+          img.src = symbol.image;
+          name.textContent = symbol.label || imageKey;
+          notification.classList.add("active");
+          
+          // Hide automatically after 3 seconds
+          setTimeout(() => {
+            notification.classList.remove("active");
+          }, 3000);
+        }
+      }
+
+      function handleGameComplete() {
+        stopTimer();
+        
+        // If cleared within time limit, mint image
+        const mintedKey = mintRandomImage();
+        if (mintedKey) {
+          showMintNotification(mintedKey);
+          // Update gallery
+          renderGallery();
+          // Show mint preview modal
+          openMintPreview(mintedKey);
+        }
+        endGame();
+      }
+
+      // UI refs
+      const $ = (s) => document.querySelector(s);
+
+      function pickSymbolsForBoard() {
+        // Prioritize collected images
+        const collection = getCollection();
+        const totalPairs = (4 * 6) / 2; // Stage 3 is always 4 columns × 6 rows = 24 cards = 12 pairs
+        const pool = [
+          "Base_1",
+          "Base_2",
+          "Base_3",
+          "Base_4",
+          "Base_5",
+          "Base_6",
+          "Base_7",
+          "Base_8",
+          "Base_9",
+          "Base_10",
+          "Base_11",
+          "Base_12",
+          "Base_13",
+          "Base_14",
+          "Base_15",
+        ];
+        
+        // Put collected images first
+        const collected = pool.filter(key => collection.includes(key));
+        const notCollected = pool.filter(key => !collection.includes(key));
+        const prioritizedPool = [...collected, ...notCollected];
+        
+        // shuffle prioritized pool
+        for (let i = prioritizedPool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [prioritizedPool[i], prioritizedPool[j]] = [prioritizedPool[j], prioritizedPool[i]];
+        }
+        const selected = prioritizedPool.slice(0, Math.min(totalPairs, prioritizedPool.length));
+        return selected;
+      }
+
+      function buildDeck() {
+        const selected = pickSymbolsForBoard();
+        const pairCards = [];
+        let uid = 0;
+        selected.forEach((key) => {
+          pairCards.push({ id: uid++, key });
+          pairCards.push({ id: uid++, key });
+        });
+        // If grid has odd count (shouldn't), trim
+        const need = CONFIG.gameplay.cols * CONFIG.gameplay.rows;
+        while (pairCards.length > need) pairCards.pop();
+        // shuffle deck
+        for (let i = pairCards.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pairCards[i], pairCards[j]] = [pairCards[j], pairCards[i]];
+        }
+        deck = pairCards;
+      }
+
+      function renderGrid() {
+        const grid = $("#grid");
+        grid.innerHTML = "";
+        deck.forEach((card, index) => {
+          const el = document.createElement("button");
+          el.className = "card";
+          el.setAttribute("role", "gridcell");
+          el.setAttribute("aria-label", "Card");
+          el.dataset.index = String(index);
+          el.innerHTML = `
+          <div class="card-inner">
+            <div class="card-face card-front" aria-label="Card back"></div>
+            <div class="card-face card-back">${symbolHTML(card.key)}</div>
+          </div>
+        `;
+          el.addEventListener("click", onCardClick);
+          grid.appendChild(el);
+        });
+      }
+
+      function symbolHTML(key) {
+        const sym = ASSETS.symbols[key] || { label: key, image: "" };
+        const img = sym.image && sym.image.trim();
+        const alt = sym.label || key;
+        const src = img ? img : svgPlaceholder(key);
+        return `<img src="${src}" alt="${alt}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;border:none;outline:none;"/>`;
+      }
+
+      function svgPlaceholder(key) {
+        // Deterministic pastel color based on key
+        const colors = [
+          "#93c5fd",
+          "#60a5fa",
+          "#3b82f6",
+          "#1d4ed8",
+          "#38bdf8",
+          "#0ea5e9",
+          "#22d3ee",
+          "#2563eb",
+          "#1e40af",
+        ];
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) {
+          hash = (hash << 5) - hash + key.charCodeAt(i);
+          hash |= 0;
+        }
+        const bg = colors[Math.abs(hash) % colors.length];
+        const label = key.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const svg = `<?xml version='1.0' encoding='UTF-8'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'>\n  <defs>\n    <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>\n      <stop offset='0%' stop-color='${bg}' stop-opacity='0.95'/>\n      <stop offset='100%' stop-color='#0b0b0e' stop-opacity='0.4'/>\n    </linearGradient>\n  </defs>\n  <rect x='0' y='0' width='300' height='300' rx='24' fill='url(#g)' />\n  <text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-family='system-ui,Segoe UI,Roboto,sans-serif' font-size='36' fill='#ffffff' font-weight='700'>${label}</text>\n</svg>`;
+        return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+      }
+
+      function flipCardElement(el, flipped) {
+        if (flipped) el.classList.add("flipped");
+        else el.classList.remove("flipped");
+      }
+
+      function playSnd(name) {
+        if (isMuted) return;
+        const s = loadedSounds[name];
+        if (s) {
+          try {
+            s.currentTime = 0;
+            s.play();
+          } catch (e) {}
+        }
+      }
+
+      function onCardClick(e) {
+        if (!gameStarted || lock) return;
+        const cardEl = e.currentTarget.closest(".card");
+        const idx = Number(cardEl.dataset.index);
+        const card = deck[idx];
+        if (!card || cardEl.classList.contains("flipped") || card.matched) return;
+
+        playSnd("flip");
+        flipCardElement(cardEl, true);
+
+        if (!firstPick) {
+          firstPick = { idx, key: card.key };
+          return;
+        }
+
+        const prevEl = document.querySelector(`.card[data-index="${firstPick.idx}"]`);
+        if (firstPick.key === card.key) {
+          // Match!
+          card.matched = true;
+          deck[firstPick.idx].matched = true;
+          markMatched(prevEl);
+          markMatched(cardEl);
+          matches += 1;
+          playSnd("match");
+          firstPick = null;
+          
+          // Clear when all cards are matched
+          if (matches === deck.length / 2) {
+            handleGameComplete();
+          }
+        } else {
+          // Not match
+          playSnd("fail");
+          lock = true;
+          const a = prevEl;
+          const b = cardEl;
+          setTimeout(() => {
+            flipCardElement(a, false);
+            flipCardElement(b, false);
+            lock = false;
+          }, CONFIG.gameplay.flipDelayMs);
+          firstPick = null;
+        }
+      }
+
+      function markMatched(el) {
+        el.classList.add("matched");
+      }
+
+
+      function startTimer() {
+        if (!CONFIG.ui.showTimer) {
+          $(".timer").style.display = "none";
+          return;
+        }
+        stopTimer();
+        const limit = Number(CONFIG.gameplay.timeLimitSec || 100);
+        const endAt = performance.now() + limit * 1000;
+        const tick = (now) => {
+          let remain = Math.max(0, endAt - now);
+          const sec = remain / 1000;
+          remainSeconds = sec;
+          $("#time").textContent = sec.toFixed(1);
+          if (!gameStarted) {
+            return;
+          }
+          if (remain <= 0) {
+            $("#time").textContent = "0.0";
+            endGame();
+            return;
+          }
+          timerId = requestAnimationFrame(tick);
+        };
+        timerId = requestAnimationFrame(tick);
+      }
+      function stopTimer() {
+        if (timerId) cancelAnimationFrame(timerId);
+        timerId = null;
+      }
+
+      function resetGame() {
+        matches = 0;
+        firstPick = null;
+        lock = false;
+        buildDeck();
+        renderGrid();
+      }
+
+      function showStartScreen() {
+        // Hide game overlay; use standalone start-wrapper for start screen
+        const overlay = $("#overlay");
+        overlay.classList.remove("game-over", "start-screen");
+        overlay.hidden = true;
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+
+        // Close other overlays
+        closePreview();
+        closeMintPreview();
+        closeGallery();
+        const galleryOverlay = document.getElementById("gallery-overlay");
+        if (galleryOverlay) {
+          galleryOverlay.classList.remove("active");
+          galleryOverlay.style.display = "none";
+          galleryOverlay.style.pointerEvents = "none";
+        }
+        const previewOverlay = document.getElementById("preview-overlay");
+        if (previewOverlay) {
+          previewOverlay.classList.remove("active");
+          previewOverlay.style.display = "none";
+          previewOverlay.style.pointerEvents = "none";
+        }
+        const mintPreviewOverlay = document.getElementById("mint-preview-overlay");
+        if (mintPreviewOverlay) {
+          mintPreviewOverlay.classList.remove("active");
+          mintPreviewOverlay.style.display = "none";
+          mintPreviewOverlay.style.pointerEvents = "none";
+        }
+
+        // Start button and wrapper
+        const startBtn = $("#btn-start");
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper && startBtn && startBtn.parentElement !== startWrapper) {
+          startWrapper.appendChild(startBtn);
+        }
+        if (startWrapper) {
+          startWrapper.removeAttribute("hidden");
+          startWrapper.classList.remove("hidden");
+          startWrapper.setAttribute("style", "display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: auto !important; z-index: 9999 !important; position: absolute !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; width: min(100vw, 420px) !important; height: min(100vh, 720px) !important; aspect-ratio: 2 / 3 !important; visibility: visible !important; opacity: 1 !important;");
+          startWrapper.hidden = false;
+        }
+        if (startBtn) {
+          startBtn.removeAttribute("hidden");
+          startBtn.setAttribute("style", "display: inline-block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 10000 !important; position: absolute !important; left: 50% !important; top: calc(50% + 7%) !important; transform: translate(-50%, -50%) !important;");
+          startBtn.disabled = false;
+          startBtn.hidden = false;
+          startBtn.onclick = startGame;
+        }
+
+        // Show start frame
+        const startFrame = $("#start-frame");
+        if (startFrame) {
+          startFrame.removeAttribute("hidden");
+          startFrame.setAttribute("style", "display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important; pointer-events: none !important; z-index: 0 !important; visibility: visible !important; opacity: 1 !important;");
+          startFrame.hidden = false;
+        }
+
+        // Hide game over message
+        $("#game-over-message").style.display = "none";
+      }
+
+      // Share to Farcaster
+      async function shareToFarcaster() {
+        try {
+          const collection = getCollection();
+          const collectedCount = collection.length;
+          const totalImages = 15;
+          const shareUrl = "https://farcaster.xyz/miniapps/kXFgUzYr-DBi/based-matching-game";
+          const shareText = `🎮 Based Matching Game 🎮\n\nI collected ${collectedCount}/${totalImages} images!\n\nPlay the game: ${shareUrl}`;
+          
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.composeCast === 'function') {
+            try {
+              await window.farcasterSDK.actions.composeCast({
+                text: shareText,
+                embeds: [shareUrl]
+              });
+              console.log("✅ Share via ESM SDK successful");
+              return;
+            } catch (e) {
+              console.warn("⚠️ ESM SDK composeCast error:", e);
+              // Continue to fallback
+            }
+          }
+          
+          // Check CDN loaded SDK
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            if (typeof window.farcaster.sdk.actions.composeCast === 'function') {
+              try {
+                await window.farcaster.sdk.actions.composeCast({
+                  text: shareText,
+                  embeds: [shareUrl]
+                });
+                console.log("✅ Share via CDN SDK successful");
+                return;
+              } catch (e) {
+                console.warn("⚠️ CDN SDK composeCast error:", e);
+                // Continue to fallback
+              }
+            }
+          }
+          
+          // Fallback: Copy to clipboard or open share dialog
+          console.log("ℹ️ Farcaster SDK not available, using fallback");
+          if (navigator.share) {
+            // Use Web Share API if available (mobile)
+            try {
+              await navigator.share({
+                title: "Based Matching Game",
+                text: shareText,
+                url: shareUrl
+              });
+              console.log("✅ Share via Web Share API successful");
+              return;
+            } catch (err) {
+              console.warn("⚠️ Web Share API failed:", err);
+              // Continue to clipboard fallback
+            }
+          }
+          
+          // Final fallback: Copy to clipboard
+          copyToClipboard(shareText);
+          
+        } catch (e) {
+          console.error("❌ Share function error:", e);
+          alert("Failed to share. Please try again.");
+        }
+      }
+
+      function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+          alert("Share text copied to clipboard! Paste it in Farcaster.");
+        }).catch(() => {
+          // Fallback for older browsers
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          try {
+            document.execCommand("copy");
+            alert("Share text copied to clipboard! Paste it in Farcaster.");
+          } catch (e) {
+            prompt("Copy this text to share on Farcaster:", text);
+          }
+          document.body.removeChild(textarea);
+        });
+      }
+
+      // Connect wallet
+      let connectedWalletType = null; // 'metamask' or 'farcaster'
+      let farcasterWallet = null;
+      
+      async function connectWallet() {
+        if (typeof window.ethereum !== "undefined") {
+          try {
+            // Request account access
+            const accounts = await window.ethereum.request({
+              method: "eth_requestAccounts"
+            });
+            
+            // Switch to Base chain
+            await switchToBaseChain();
+            
+            connectedWalletType = 'metamask';
+            return accounts[0];
+          } catch (error) {
+            console.error("Wallet connection error:", error);
+            throw error;
+          }
+        } else {
+          // Try Farcaster SDK wallet connection
+          if (window.farcaster && window.farcaster.sdk) {
+            try {
+              // Request wallet through Farcaster SDK
+              const wallet = await window.farcaster.sdk.actions.requestWallet();
+              connectedWalletType = 'farcaster';
+              farcasterWallet = wallet;
+              return wallet.address;
+            } catch (e) {
+              console.error("Farcaster wallet error:", e);
+              throw new Error("Failed to connect Farcaster wallet. Please try again.");
+            }
+          }
+          throw new Error("Please install MetaMask or use Farcaster client");
+        }
+      }
+
+      // Switch to Base chain
+      async function switchToBaseChain() {
+        if (typeof window.ethereum !== "undefined") {
+          try {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: `0x${BASE_CHAIN_ID.toString(16)}` }]
+            });
+          } catch (switchError) {
+            // If chain doesn't exist, add it
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: `0x${BASE_CHAIN_ID.toString(16)}`,
+                  chainName: "Base",
+                  nativeCurrency: {
+                    name: "Ether",
+                    symbol: "ETH",
+                    decimals: 18
+                  },
+                  rpcUrls: [BASE_RPC_URL],
+                  blockExplorerUrls: ["https://basescan.org"]
+                }]
+              });
+            } else {
+              throw switchError;
+            }
+          }
+        }
+      }
+
+      // Upload image to IPFS using Pinata (optional)
+      async function uploadToIPFS(imageUrl, imageKey) {
+        if (!USE_IPFS || !PINATA_API_KEY) {
+          // Return image URL directly if IPFS is not configured
+          return imageUrl;
+        }
+        
+        try {
+          // Fetch the image
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          
+          // Create form data
+          const formData = new FormData();
+          formData.append('file', blob, `${imageKey}.jpg`);
+          
+          // Pinata metadata
+          const metadata = JSON.stringify({
+            name: `Based Matching Game - ${imageKey}`,
+            description: `NFT from Based Matching Game - ${imageKey}`,
+            keyvalues: {
+              game: 'based-matching-game',
+              imageKey: imageKey
+            }
+          });
+          formData.append('pinataMetadata', metadata);
+          
+          // Pinata options
+          const pinataOptions = JSON.stringify({
+            cidVersion: 1
+          });
+          formData.append('pinataOptions', pinataOptions);
+          
+          // Upload to Pinata
+          const pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+            method: 'POST',
+            headers: {
+              'pinata_api_key': PINATA_API_KEY,
+              'pinata_secret_api_key': PINATA_SECRET_KEY
+            },
+            body: formData
+          });
+          
+          const pinataData = await pinataResponse.json();
+          
+          if (pinataData.IpfsHash) {
+            return `ipfs://${pinataData.IpfsHash}`;
+          } else {
+            console.warn("IPFS upload failed, using image URL:", pinataData);
+            return imageUrl;
+          }
+        } catch (error) {
+          console.error("IPFS upload error:", error);
+          // Fallback to image URL
+          return imageUrl;
+        }
+      }
+      
+      // Create NFT metadata JSON
+      async function createMetadata(imageUrl, imageKey, tokenURI) {
+        const metadata = {
+          name: `Based Matching Game - ${imageKey}`,
+          description: `NFT collected from Based Matching Game - ${imageKey}`,
+          image: tokenURI.startsWith('ipfs://') ? tokenURI : imageUrl,
+          attributes: [
+            {
+              trait_type: "Game",
+              value: "Based Matching Game"
+            },
+            {
+              trait_type: "Image Key",
+              value: imageKey
+            }
+          ]
+        };
+        return metadata;
+      }
+
+      // Mint NFT on Base chain
+      async function mintNFT(imageKey) {
+        try {
+          // Check if ethers is loaded - wait a bit if not immediately available
+          if (typeof ethers === "undefined") {
+            // Wait a bit for ethers to load (especially on mobile)
+            let ethersLoaded = false;
+            for (let i = 0; i < 50; i++) {
+              if (typeof ethers !== "undefined") {
+                ethersLoaded = true;
+                break;
+              }
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            if (!ethersLoaded) {
+              alert("Ethers.js library is not loaded. Please refresh the page and try again.\n\nIf the problem persists, check your internet connection.");
+              console.error("ethers is not defined after waiting");
+              return;
+            }
+          }
+
+          // Check if already minted
+          const mintedImages = getMintedImages();
+          if (mintedImages.includes(imageKey)) {
+            alert("This image has already been minted!");
+            return;
+          }
+
+          // Check if image is in collection
+          const collection = getCollection();
+          if (!collection.includes(imageKey)) {
+            alert("You need to collect this image first!");
+            return;
+          }
+
+          // Connect wallet
+          const address = await connectWallet();
+          if (!address) {
+            alert("Please connect your wallet first!");
+            return;
+          }
+
+          // Get image data
+          const symbol = ASSETS.symbols[imageKey];
+          if (!symbol || !symbol.image) {
+            alert("Image data not found!");
+            return;
+          }
+
+          // Show loading
+          const mintBtn = document.querySelector(`.mint-button[data-image-key="${imageKey}"]`);
+          if (mintBtn) {
+            mintBtn.disabled = true;
+            mintBtn.textContent = "Minting...";
+          }
+
+          // Validate contract address
+          if (NFT_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+            alert("NFT contract address is not set! Please deploy the contract first.\n\nSee contracts/README.md for deployment instructions.");
+            throw new Error("Contract address not set");
+          }
+
+          // Setup provider and signer
+          let provider, signer, network;
+          
+          if (connectedWalletType === 'farcaster' && farcasterWallet) {
+            // Farcaster SDK wallet - use the wallet's provider if available
+            if (farcasterWallet.provider) {
+              provider = new ethers.providers.Web3Provider(farcasterWallet.provider);
+              signer = provider.getSigner();
+            } else if (window.ethereum) {
+              // Fallback to window.ethereum if available
+              provider = new ethers.providers.Web3Provider(window.ethereum);
+              signer = provider.getSigner();
+            } else {
+              // Farcaster SDK wallet but no provider available
+              // Try to use Farcaster SDK's transaction signing
+              alert("Farcaster wallet is connected, but transaction signing is not fully supported yet.\n\nPlease use MetaMask for NFT minting, or check if your Farcaster client supports wallet transactions.");
+              throw new Error("Farcaster wallet provider not available");
+            }
+          } else if (typeof window.ethereum !== "undefined") {
+            // MetaMask or other Web3 wallet
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+          } else {
+            alert("No wallet provider found. Please install MetaMask or use a Farcaster client with wallet support.");
+            throw new Error("No wallet provider available");
+          }
+          
+          // Verify network
+          network = await provider.getNetwork();
+          if (network.chainId !== BASE_CHAIN_ID) {
+            if (connectedWalletType === 'farcaster') {
+              alert(`Please switch to Base network (Chain ID: ${BASE_CHAIN_ID}) in your Farcaster client.\nCurrent network: ${network.chainId}`);
+            } else {
+              alert(`Please switch to Base network (Chain ID: ${BASE_CHAIN_ID})\nCurrent network: ${network.chainId}`);
+              await switchToBaseChain();
+            }
+            // Re-check after switching
+            network = await provider.getNetwork();
+            if (network.chainId !== BASE_CHAIN_ID) {
+              throw new Error("Failed to switch to Base network");
+            }
+          }
+          
+          // Create contract instance
+          const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
+          
+          // Check if contract is deployed
+          try {
+            await contract.totalSupply();
+          } catch (error) {
+            alert("Contract not found at the specified address. Please verify the contract address.");
+            throw new Error("Contract not found");
+          }
+
+          // Upload image to IPFS (or use image URL)
+          const tokenURI = await uploadToIPFS(symbol.image, imageKey);
+          
+          console.log("Minting NFT with tokenURI:", tokenURI);
+
+          // Mint NFT
+          const tx = await contract.mint(address, tokenURI, {
+            gasLimit: 500000 // Set gas limit to prevent out of gas errors
+          });
+          
+          console.log("Transaction sent:", tx.hash);
+          
+          // Wait for transaction confirmation
+          const receipt = await tx.wait();
+          console.log("Transaction confirmed:", receipt);
+
+          // Save minted image
+          saveMintedImage(imageKey);
+
+          // Update UI
+          if (mintBtn) {
+            mintBtn.textContent = "Minted ✓";
+            mintBtn.disabled = true;
+          }
+          // Refresh gallery
+          renderGallery();
+
+          // Update preview modal button if open
+          const previewMintBtn = document.getElementById("preview-mint-btn");
+          if (previewMintBtn && previewMintBtn.dataset.imageKey === imageKey) {
+            previewMintBtn.textContent = "Minted ✓";
+            previewMintBtn.disabled = true;
+            previewMintBtn.style.display = "none";
+          }
+          // Update mint preview modal button if open
+          const mintPreviewBtn = document.getElementById("mint-preview-mint-btn");
+          if (mintPreviewBtn && mintPreviewBtn.dataset.imageKey === imageKey) {
+            mintPreviewBtn.textContent = "Minted ✓";
+            mintPreviewBtn.disabled = true;
+            mintPreviewBtn.style.display = "none";
+          }
+
+          // Get token ID from transaction receipt
+          const tokenId = receipt.logs[0]?.topics[3] ? parseInt(receipt.logs[0].topics[3], 16) : "N/A";
+          
+          alert(`NFT minted successfully!\n\nToken ID: ${tokenId}\nTransaction: ${tx.hash}\n\nView on BaseScan: https://basescan.org/tx/${tx.hash}`);
+          
+        } catch (error) {
+          console.error("Minting error:", error);
+          
+          let errorMessage = "Unknown error";
+          if (error.code === 4001) {
+            errorMessage = "Transaction rejected by user";
+          } else if (error.code === -32603) {
+            errorMessage = "Transaction failed. Please check your balance and try again.";
+          } else if (error.message) {
+            errorMessage = error.message;
+          } else if (error.reason) {
+            errorMessage = error.reason;
+          }
+          
+          alert(`Minting failed: ${errorMessage}\n\nPlease check:\n- You have enough ETH for gas fees\n- You're connected to Base network\n- The contract address is correct`);
+          
+          // Reset button
+          const mintBtn = document.querySelector(`.mint-button[data-image-key="${imageKey}"]`);
+          if (mintBtn) {
+            mintBtn.disabled = false;
+            mintBtn.textContent = "Mint NFT";
+          }
+          
+          // Reset preview buttons
+          const previewMintBtn = document.getElementById("preview-mint-btn");
+          if (previewMintBtn && previewMintBtn.dataset.imageKey === imageKey) {
+            previewMintBtn.disabled = false;
+            previewMintBtn.textContent = "Mint NFT";
+          }
+          const mintPreviewBtn = document.getElementById("mint-preview-mint-btn");
+          if (mintPreviewBtn && mintPreviewBtn.dataset.imageKey === imageKey) {
+            mintPreviewBtn.disabled = false;
+            mintPreviewBtn.textContent = "Mint NFT";
+          }
+        }
+      }
+
+      function startGame() {
+        console.log("startGame() invoked");
+        // Start with stage 3 (4 columns × 6 rows)
+        stopTimer();
+        const overlay = $("#overlay");
+        overlay.classList.remove("start-screen", "game-over");
+        overlay.hidden = true;
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        
+        // Hide start frame
+        const startFrame = $("#start-frame");
+        if (startFrame) {
+          startFrame.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important;");
+          startFrame.hidden = true;
+        }
+        
+        // Hide start wrapper and button
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper) {
+          startWrapper.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startWrapper.setAttribute("hidden", "true");
+          startWrapper.hidden = true;
+          startWrapper.classList.add("hidden");
+        }
+        
+        const startBtn = $("#btn-start");
+        if (startBtn) {
+          startBtn.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startBtn.setAttribute("hidden", "true");
+          startBtn.hidden = true;
+        }
+        
+        updateGridColumns();
+        matches = 0;
+        firstPick = null;
+        lock = false;
+        buildDeck();
+        renderGrid();
+        gameStarted = true;
+        startTimer();
+        overlay.hidden = true;
+        overlay.style.display = "none";
+      }
+
+      // Expose startGame for inline handler
+      window.startGame = startGame;
+
+      function endGame() {
+        gameStarted = false;
+        stopTimer();
+        // Show overlay
+        const overlay = $("#overlay");
+        overlay.style.background = "rgba(0,0,0,0.6)";
+        overlay.style.backgroundSize = "";
+        overlay.style.backgroundPosition = "";
+        overlay.classList.add("game-over");
+        
+        // Hide start button completely
+        const startBtn = $("#btn-start");
+        if (startBtn) {
+          startBtn.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startBtn.setAttribute("hidden", "true");
+          startBtn.hidden = true;
+        }
+        
+        // Hide start wrapper and frame
+        const startWrapper = $("#start-wrapper");
+        if (startWrapper) {
+          startWrapper.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;");
+          startWrapper.setAttribute("hidden", "true");
+          startWrapper.hidden = true;
+          startWrapper.classList.add("hidden");
+        }
+        const startFrame = $("#start-frame");
+        if (startFrame) {
+          startFrame.setAttribute("style", "display: none !important; visibility: hidden !important; opacity: 0 !important;");
+          startFrame.setAttribute("hidden", "true");
+          startFrame.hidden = true;
+        }
+        
+        // Show play again button
+        const playAgainBtn = $("#btn-play-again");
+        playAgainBtn.hidden = false;
+        playAgainBtn.style.display = "inline-block";
+        playAgainBtn.style.visibility = "visible";
+        playAgainBtn.style.opacity = "1";
+        playAgainBtn.style.pointerEvents = "auto";
+        
+        // Show share button
+        const shareBtn = $("#btn-share-farcaster");
+        shareBtn.hidden = false;
+        shareBtn.style.display = "inline-block";
+        shareBtn.style.visibility = "visible";
+        shareBtn.style.opacity = "1";
+        shareBtn.style.pointerEvents = "auto";
+        
+        // Show game over message
+        const gameOverMessage = $("#game-over-message");
+        gameOverMessage.textContent = "GAME OVER";
+        gameOverMessage.style.display = "block";
+
+        overlay.hidden = false;
+        overlay.style.display = "grid";
+      }
+
+
+      // Show gallery
+      function showGallery() {
+        const overlay = document.getElementById("gallery-overlay");
+        if (!overlay) return;
+        // Hide start wrapper so it doesn't block clicks
+        const startWrapper = document.getElementById("start-wrapper");
+        if (startWrapper) {
+          startWrapper.style.display = "none";
+          startWrapper.style.pointerEvents = "none";
+        }
+        overlay.style.display = "grid";
+        overlay.style.pointerEvents = "auto";
+        overlay.classList.add("active");
+        renderGallery();
+      }
+
+      // Close gallery
+      function closeGallery() {
+        const overlay = document.getElementById("gallery-overlay");
+        if (!overlay) return;
+        overlay.classList.remove("active");
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        closePreview();
+      }
+
+      // Render gallery
+      function renderGallery() {
+        const grid = document.getElementById("gallery-grid");
+        grid.innerHTML = "";
+        
+        const collection = getCollection();
+        const mintedImages = getMintedImages();
+        const allImages = Object.keys(ASSETS.symbols);
+        
+        allImages.forEach((key) => {
+          const item = document.createElement("div");
+          item.className = "gallery-item";
+          item.dataset.imageKey = key;
+          
+          const symbol = ASSETS.symbols[key];
+          if (collection.includes(key)) {
+            // Acquired
+            const img = document.createElement("img");
+            img.src = symbol.image || "";
+            img.alt = symbol.label || key;
+            item.appendChild(img);
+            
+            // Add mint button if not minted
+            if (!mintedImages.includes(key)) {
+              const mintBtn = document.createElement("button");
+              mintBtn.className = "ui secondary mint-button";
+              mintBtn.textContent = "Mint NFT";
+              mintBtn.dataset.imageKey = key;
+              mintBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                mintNFT(key);
+              });
+              item.appendChild(mintBtn);
+            } else {
+              item.classList.add("minted");
+            }
+            
+            // Click to preview (only if collected)
+            item.addEventListener("click", () => openPreview(key));
+          } else {
+            // Not acquired
+            item.classList.add("locked");
+          }
+          
+          grid.appendChild(item);
+        });
+      }
+
+      function openPreview(imageKey) {
+        const symbol = ASSETS.symbols[imageKey];
+        if (!symbol) return;
+        const overlay = document.getElementById("preview-overlay");
+        const img = document.getElementById("preview-image");
+        const label = document.getElementById("preview-label");
+        const mintBtn = document.getElementById("preview-mint-btn");
+        
+        const collection = getCollection();
+        const mintedImages = getMintedImages();
+        const isCollected = collection.includes(imageKey);
+        const isMinted = mintedImages.includes(imageKey);
+        
+        if (isCollected) {
+          img.src = symbol.image || "";
+          label.textContent = ""; // Remove file name text
+          if (!isMinted) {
+            mintBtn.style.display = "inline-block";
+            mintBtn.disabled = false;
+            mintBtn.dataset.imageKey = imageKey;
+            mintBtn.textContent = "Mint NFT";
+            mintBtn.onclick = () => mintNFT(imageKey);
+          } else {
+            mintBtn.style.display = "none";
+            mintBtn.onclick = null;
+          }
+        } else {
+          img.src = "";
+          label.textContent = "Locked";
+          mintBtn.style.display = "none";
+          mintBtn.onclick = null;
+        }
+        
+        // Show overlay with pointer events
+        overlay.style.display = "grid";
+        overlay.style.pointerEvents = "auto";
+        overlay.classList.add("active");
+        overlay.setAttribute("aria-hidden", "false");
+      }
+      
+      function closePreview() {
+        const overlay = document.getElementById("preview-overlay");
+        overlay.style.display = "none";
+        overlay.style.pointerEvents = "none";
+        overlay.classList.remove("active");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+
+      function openMintPreview(imageKey) {
+        const symbol = ASSETS.symbols[imageKey];
+        if (!symbol) return;
+        const overlay = document.getElementById("mint-preview-overlay");
+        const img = document.getElementById("mint-preview-image");
+        const label = document.getElementById("mint-preview-label");
+        const mintBtn = document.getElementById("mint-preview-mint-btn");
+        
+        const mintedImages = getMintedImages();
+        const isMinted = mintedImages.includes(imageKey);
+        
+        img.src = symbol.image || "";
+        label.textContent = symbol.label || imageKey;
+        mintBtn.dataset.imageKey = imageKey;
+        
+        if (!isMinted) {
+          mintBtn.style.display = "inline-block";
+          mintBtn.disabled = false;
+          mintBtn.textContent = "Mint NFT";
+          mintBtn.onclick = () => mintNFT(imageKey);
+        } else {
+          mintBtn.style.display = "none";
+          mintBtn.onclick = null;
+        }
+        
+        overlay.classList.add("active");
+        overlay.setAttribute("aria-hidden", "false");
+      }
+      
+      function closeMintPreview() {
+        const overlay = document.getElementById("mint-preview-overlay");
+        overlay.classList.remove("active");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+
+      function setupEventListeners() {
+        $("#btn-start").addEventListener("click", () => {
+          startGame();
+        });
+        $("#btn-play-again").addEventListener("click", () => {
+          // Hide overlay and start game
+          const overlay = $("#overlay");
+          overlay.hidden = true;
+          overlay.style.display = "none";
+          overlay.classList.remove("game-over");
+          resetGame();
+          startGame();
+        });
+        $("#btn-share-farcaster").addEventListener("click", () => {
+          shareToFarcaster();
+        });
+        $("#btn-restart").addEventListener("click", () => {
+          resetGame();
+          startGame();
+        });
+        $("#btn-top").addEventListener("click", () => {
+          showStartScreen();
+        });
+        $("#btn-gallery").addEventListener("click", () => {
+          showGallery();
+        });
+        $("#btn-close-gallery").addEventListener("click", () => {
+          closeGallery();
+        });
+        // Preview modal controls
+        $("#preview-close-btn").addEventListener("click", () => {
+          closePreview();
+        });
+        $("#preview-overlay").addEventListener("click", (e) => {
+          if (e.target.id === "preview-overlay") {
+            closePreview();
+          }
+        });
+        // Mint preview controls
+        $("#mint-preview-close-btn").addEventListener("click", () => {
+          closeMintPreview();
+        });
+        $("#mint-preview-overlay").addEventListener("click", (e) => {
+          if (e.target.id === "mint-preview-overlay") {
+            closeMintPreview();
+          }
+        });
+      }
+
+      // Wait for Farcaster SDK to be available - check multiple locations
+      async function waitForFarcasterSDK(maxAttempts = 300) {
+        for (let i = 0; i < maxAttempts; i++) {
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.ready === 'function') {
+            console.log("✅ Farcaster SDK detected (ESM) at attempt", i + 1);
+            return window.farcasterSDK;
+          }
+          // Check CDN loaded SDK
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions && typeof window.farcaster.sdk.actions.ready === 'function') {
+            console.log("✅ Farcaster SDK detected (CDN) at attempt", i + 1);
+            return window.farcaster.sdk;
+          }
+          // Also check if SDK is available via different path
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            console.log("✅ Farcaster SDK detected (CDN, no ready check) at attempt", i + 1);
+            return window.farcaster.sdk;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        console.warn("❌ Farcaster SDK not found after", maxAttempts, "attempts");
+        return null;
+      }
+
+      // Call ready() to hide splash screen - MUST be called in Farcaster client
+      async function callFarcasterReady() {
+        try {
+          // First, wait for SDK to be available (with longer timeout)
+          const sdk = await waitForFarcasterSDK(300);
+          
+          if (sdk && sdk.actions && typeof sdk.actions.ready === 'function') {
+            try {
+              // Call ready() - this is critical for hiding splash screen
+              await sdk.actions.ready();
+              console.log("✅ Farcaster SDK ready() called successfully");
+              return true;
+            } catch (e) {
+              console.error("❌ Farcaster SDK ready() error:", e);
+              console.error("Error details:", e.message, e.stack);
+              return false;
+            }
+          } else {
+            // Not in Farcaster client - this is OK for regular browsers
+            console.log("ℹ️ Farcaster SDK not available (running in regular browser)");
+            return false;
+          }
+        } catch (e) {
+          console.error("❌ Error in callFarcasterReady():", e);
+          console.error("Error details:", e.message, e.stack);
+          return false;
+        }
+      }
+      
+      // Immediate ready() call attempt - call as soon as SDK is detected
+      (function() {
+        let readyCalled = false;
+        let attempts = 0;
+        const maxAttempts = 500; // 25 seconds max
+        
+        async function tryCallReadyImmediately() {
+          attempts++;
+          
+          if (readyCalled) {
+            return;
+          }
+          
+          // Check ESM imported SDK first (preferred)
+          if (window.farcasterSDK && window.farcasterSDK.actions && typeof window.farcasterSDK.actions.ready === 'function') {
+            try {
+              await window.farcasterSDK.actions.ready();
+              console.log("✅ Farcaster SDK ready() called immediately via ESM (attempt", attempts + ")");
+              readyCalled = true;
+              return;
+            } catch (e) {
+              console.warn("⚠️ ESM ready() call failed:", e);
+            }
+          }
+          
+          // Check CDN loaded SDK
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            if (typeof window.farcaster.sdk.actions.ready === 'function') {
+              try {
+                await window.farcaster.sdk.actions.ready();
+                console.log("✅ Farcaster SDK ready() called immediately via CDN (attempt", attempts + ")");
+                readyCalled = true;
+                return;
+              } catch (e) {
+                console.warn("⚠️ CDN ready() call failed:", e);
+                // Continue trying
+              }
+            }
+          }
+          
+          // Continue trying if not called yet and within max attempts
+          if (!readyCalled && attempts < maxAttempts) {
+            setTimeout(tryCallReadyImmediately, 50);
+          } else if (!readyCalled) {
+            console.warn("⚠️ Could not call ready() immediately after", attempts, "attempts");
+          }
+        }
+        
+        // Start trying immediately
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', tryCallReadyImmediately);
+        } else {
+          tryCallReadyImmediately();
+        }
+        
+        // Also try on window load
+        window.addEventListener('load', tryCallReadyImmediately);
+      })();
+
+      async function init() {
+        // IMPORTANT: Call ready() as early as possible, but after basic setup
+        // This must be called to hide the splash screen in Farcaster client
+        
+        // Start waiting for SDK immediately (don't block on other initialization)
+        const readyPromise = callFarcasterReady();
+        
+        // Do basic initialization
+        initConfig();
+        initAssets();
+        setupEventListeners();
+
+        // Show start screen
+        showStartScreen();
+
+        // Wait for ready() to complete (with timeout to not block forever)
+        try {
+          await Promise.race([
+            readyPromise,
+            new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
+          ]);
+        } catch (e) {
+          console.warn("Ready() call had issues:", e);
+        }
+
+        // Ensure start screen is still visible after ready()
+        showStartScreen();
+        // Render initial gallery
+        renderGallery();
+        
+        // Check wallet connection on load
+        if (typeof window.ethereum !== "undefined") {
+          window.ethereum.on("accountsChanged", () => {
+            renderGallery();
+          });
+          window.ethereum.on("chainChanged", () => {
+            renderGallery();
+          });
+        }
+      }
+      
+      // Also try to call ready() immediately when SDK becomes available
+      // This is a fallback in case init() hasn't run yet
+      (function() {
+        let readyCalled = false;
+        async function tryCallReady() {
+          if (readyCalled) return;
+          
+          if (window.farcaster && window.farcaster.sdk && window.farcaster.sdk.actions) {
+            try {
+              await window.farcaster.sdk.actions.ready();
+              console.log("✅ Farcaster SDK ready() called (early call)");
+              readyCalled = true;
+            } catch (e) {
+              console.warn("Early ready() call failed:", e);
+            }
+          } else {
+            // Retry after a short delay
+            setTimeout(tryCallReady, 100);
+          }
+        }
+        
+        // Start trying immediately
+        tryCallReady();
+        
+        // Also listen for SDK load event if available
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', tryCallReady);
+        } else {
+          tryCallReady();
+        }
+      })();
+
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        setTimeout(init, 0);
+      } else {
+        window.addEventListener("DOMContentLoaded", init);
+        window.addEventListener("load", init);
+      }
+    </script>
+  </body>
+</html>
