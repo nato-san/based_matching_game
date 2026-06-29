@@ -1558,6 +1558,33 @@
         return metadata;
       }
 
+      function getAbsoluteAssetUrl(assetPath) {
+        return new URL(assetPath, window.location.origin + window.location.pathname).href;
+      }
+
+      function createMetadataTokenURI(imageUrl, imageKey) {
+        const absoluteImageUrl = getAbsoluteAssetUrl(imageUrl);
+        const metadata = {
+          name: `Based Matching Game - ${imageKey}`,
+          description: `NFT collected from Based Matching Game - ${imageKey}`,
+          image: absoluteImageUrl,
+          external_url: window.location.origin,
+          attributes: [
+            {
+              trait_type: "Game",
+              value: "Based Matching Game"
+            },
+            {
+              trait_type: "Image Key",
+              value: imageKey
+            }
+          ]
+        };
+        const json = JSON.stringify(metadata);
+        const encoded = btoa(unescape(encodeURIComponent(json)));
+        return `data:application/json;base64,${encoded}`;
+      }
+
       // Mint NFT on Base chain
       async function mintNFT(imageKey) {
         try {
@@ -1669,8 +1696,8 @@
           // Create contract instance for the user's wallet transaction.
           const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, signer);
 
-          // Upload image to IPFS (or use image URL)
-          const tokenURI = await uploadToIPFS(symbol.image, imageKey);
+          // Store NFT metadata directly, with an absolute image URL wallets can render.
+          const tokenURI = createMetadataTokenURI(symbol.image, imageKey);
           
           console.log("Minting NFT with tokenURI:", tokenURI);
 
