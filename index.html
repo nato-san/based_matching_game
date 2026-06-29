@@ -844,11 +844,11 @@
       const MINTED_KEY = "based_matching_minted";
       
       // Base chain configuration
-      const BASE_CHAIN_ID = 84532; // Base Sepolia testnet (change to 8453 for mainnet)
-      const BASE_RPC_URL = "https://sepolia.base.org"; // Base Sepolia testnet (change to https://mainnet.base.org for mainnet)
+      const BASE_CHAIN_ID = 8453; // Base mainnet
+      const BASE_RPC_URL = "https://mainnet.base.org"; // Base mainnet
       // NFT Contract address - UPDATE THIS with your deployed contract address
       // Deploy contract using: cd contracts && npm install && npm run deploy:base
-      const NFT_CONTRACT_ADDRESS = "0x6F2b1fac723266F9AeA5988e53A83aDc553A31E2"; // Base Sepolia Testnet
+      const NFT_CONTRACT_ADDRESS = "0x7644eA7D03eDE38e32031734BC340eb0a4D2858c"; // Base mainnet
       
       // ERC-721 ABI (for BaseMatchingNFT contract)
       const NFT_ABI = [
@@ -1616,7 +1616,7 @@
           network = await provider.getNetwork();
           if (network.chainId !== BASE_CHAIN_ID) {
             if (connectedWalletType === 'farcaster') {
-              alert(`Please switch to Base Sepolia network (Chain ID: ${BASE_CHAIN_ID}) in your Farcaster client.\nCurrent network: ${network.chainId}`);
+              alert(`Please switch to Base network (Chain ID: ${BASE_CHAIN_ID}) in your Farcaster client.\nCurrent network: ${network.chainId}`);
             } else {
               alert(`Please switch to Base network (Chain ID: ${BASE_CHAIN_ID})\nCurrent network: ${network.chainId}`);
               await switchToBaseChain();
