@@ -1653,10 +1653,11 @@
             }
           }
           
+          const readProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
+
           // Check if contract is deployed using a public Base RPC.
           // Some in-app wallet providers do not reliably support read-only eth_call.
           try {
-            const readProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
             const readContract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, readProvider);
             await readContract.totalSupply();
           } catch (error) {
@@ -1680,8 +1681,12 @@
           
           console.log("Transaction sent:", tx.hash);
           
-          // Wait for transaction confirmation
-          const receipt = await tx.wait();
+          // Wait for transaction confirmation using public Base RPC.
+          // Farcaster's in-app wallet provider may not support every read method ethers uses in tx.wait().
+          const receipt = await readProvider.waitForTransaction(tx.hash, 1, 120000);
+          if (!receipt) {
+            throw new Error("Transaction was sent but confirmation timed out. Please check BaseScan.");
+          }
           console.log("Transaction confirmed:", receipt);
 
           // Save minted image
