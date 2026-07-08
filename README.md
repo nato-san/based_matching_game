@@ -9,3 +9,4 @@ Adding miniapp/App to device
 
 Base rules: How to play
 Card martching via tap - matching cards will eliminate them from play
+Find the same items twice and makes a pair
