@@ -1,4 +1,4 @@
-Nato-san Games - Readme Draft 1
+Nato-san Games - Readme Draft 2
 ## Team Contributions
 
 - nato-san: Game design, implementation
@@ -10,3 +10,5 @@ Adding miniapp/App to device
 Base rules: How to play
 Card martching via tap - matching cards will eliminate them from play
 Find the same items twice and makes a pair
+
+Cute art explanations
