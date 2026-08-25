@@ -1,4 +1,4 @@
-Nato-san Games - Readme Draft 2
+Nato-san Games - Readme Draft 3
 ## Team Contributions
 
 - nato-san: Game design, implementation
